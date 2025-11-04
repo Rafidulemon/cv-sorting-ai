@@ -103,188 +103,286 @@ export default function ResultsPage() {
   }, [skillFilter, sortBy]);
 
   const shortlisted = filteredCandidates.slice(0, 10);
+  const topCandidate = shortlisted[0];
+  const metrics = [
+    { label: 'CVs processed', value: '47', helper: '12 shortlisted this run' },
+    { label: 'Avg. match score', value: '82%', helper: '+4% vs previous cycle' },
+    { label: 'Time saved', value: '6.2h', helper: 'Compared to manual review' },
+  ];
+  const averageCoverage =
+    shortlisted.length === 0
+      ? null
+      : Math.round(
+          (shortlisted.reduce((acc, candidate) => acc + candidate.skillGap.present.length, 0) /
+            (shortlisted.length * requiredSkills.length)) *
+            100,
+        );
 
   return (
     <Layout>
-      <div className="space-y-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Link href="/dashboard" className="inline-flex items-center text-sm font-medium text-primary-600 hover:text-primary-700">
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              Back to dashboard
-            </Link>
-            <h1 className="mt-3 text-2xl font-semibold text-gray-900">
-              Results • {jobId ? decodeURIComponent(jobId) : 'Unknown job'}
-            </h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Processed 47 CVs. Showing top matches ranked by overall fit score. Adjust filters to refine the shortlist.
-            </p>
+      <div className="space-y-12 text-slate-100">
+        <section className="relative overflow-hidden rounded-4xl border border-white/10 bg-gradient-to-br from-primary-700 via-primary-500 to-accent-500 p-8 shadow-glow-primary">
+          <div className="pointer-events-none absolute inset-0 opacity-65">
+            <div className="absolute -top-24 right-10 h-56 w-56 rounded-full bg-white/25 blur-3xl" />
+            <div className="absolute -bottom-20 left-12 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-              <Download className="mr-2 h-4 w-4" />
-              Export to Excel
-            </button>
-            <button className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-              <FileText className="mr-2 h-4 w-4" />
-              Export to PDF
-            </button>
-          </div>
-        </div>
-
-        <section className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary-600">Processed CVs</p>
-              <FileBarChart className="h-4 w-4 text-primary-600" />
+          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/85 transition hover:border-white/30 hover:bg-white/20"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to dashboard
+              </Link>
+              <h1 className="text-3xl font-semibold leading-tight text-white lg:text-4xl">
+                Results - {jobId ? decodeURIComponent(jobId) : 'Unknown job'}
+              </h1>
+              <p className="max-w-2xl text-sm text-white/85 lg:text-base">
+                47 CVs analysed with semantic scoring, interview-readiness weighting, and bias safeguards. Refine the
+                shortlist or export the full audit trail.
+              </p>
+              <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-white/80">
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Semantic scoring
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5">
+                  <FileBarChart className="h-3.5 w-3.5" />
+                  Explainable ranking
+                </span>
+              </div>
             </div>
-            <p className="mt-3 text-2xl font-semibold text-gray-900">47</p>
-            <p className="text-xs text-gray-500">10 shortlisted for review</p>
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary-600">Average match score</p>
-              <Sparkles className="h-4 w-4 text-primary-600" />
+            <div className="grid gap-4 rounded-3xl border border-white/20 bg-white/15 p-6 text-sm text-white backdrop-blur lg:w-80">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">Quick actions</p>
+              <button className="inline-flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/25">
+                <Download className="h-4 w-4" />
+                Download full report
+              </button>
+              <button className="inline-flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/25">
+                <FileText className="h-4 w-4" />
+                Generate share link
+              </button>
+              <p className="text-xs text-white/75">
+                Includes candidate rationales, score breakdowns, and sourcing recommendations.
+              </p>
             </div>
-            <p className="mt-3 text-2xl font-semibold text-gray-900">84%</p>
-            <p className="text-xs text-gray-500">Top candidate scored 92%</p>
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary-600">Role readiness</p>
-              <Star className="h-4 w-4 text-primary-600" />
-            </div>
-            <p className="mt-3 text-2xl font-semibold text-gray-900">{shortlisted.length} shortlisted</p>
-            <p className="text-xs text-gray-500">Focus on candidates flagged green</p>
           </div>
         </section>
 
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 border-b border-gray-200 px-6 py-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Candidate matches</h2>
-              <p className="text-sm text-gray-500">Sortable list with match score and key skill alignment.</p>
+        <section className="grid gap-4 sm:grid-cols-3">
+          {metrics.map((item) => (
+            <div
+              key={item.label}
+              className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent" />
+              <div className="relative space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/70">{item.label}</p>
+                <p className="text-3xl font-semibold text-white">{item.value}</p>
+                <p className="text-xs text-slate-300/80">{item.helper}</p>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2">
-                <Filter className="mr-2 h-4 w-4 text-gray-400" />
+          ))}
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-card-soft backdrop-blur">
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+                <button
+                  type="button"
+                  onClick={() => setSortBy('score')}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
+                    sortBy === 'score'
+                      ? 'bg-primary-500/25 text-primary-100'
+                      : 'text-slate-300/80 hover:bg-white/10'
+                  }`}
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  Score
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSortBy('name')}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
+                    sortBy === 'name'
+                      ? 'bg-primary-500/25 text-primary-100'
+                      : 'text-slate-300/80 hover:bg-white/10'
+                  }`}
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  Name
+                </button>
+              </div>
+              <div className="flex min-w-[220px] flex-1 items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200/80">
+                <Filter className="h-4 w-4 text-primary-200" />
                 <input
-                  type="search"
-                  placeholder="Filter by skill (e.g. Django)"
+                  type="text"
                   value={skillFilter}
                   onChange={(event) => setSkillFilter(event.target.value)}
-                  className="w-48 border-none p-0 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none"
+                  placeholder="Filter skills"
+                  className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
                 />
               </div>
-              <div className="flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600">
-                <ArrowUpDown className="mr-2 h-4 w-4 text-gray-400" />
-                <select
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as 'score' | 'name')}
-                  className="border-none bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
-                >
-                  <option value="score">Sort by score</option>
-                  <option value="name">Sort by name</option>
-                </select>
-              </div>
+              <button className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/25 hover:bg-white/10">
+                <ScrollText className="h-4 w-4" />
+                View audit log
+              </button>
             </div>
-          </div>
 
-          <ul className="divide-y divide-gray-200">
-            {filteredCandidates.map((candidate) => {
-              const isExpanded = expandedCandidateId === candidate.id;
-              return (
-                <li key={candidate.id} className="px-6 py-5 transition hover:bg-gray-50">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedCandidateId(isExpanded ? null : candidate.id)}
-                    className="flex w-full flex-col gap-4 text-left md:flex-row md:items-center md:justify-between"
+            <ul className="space-y-4">
+              {shortlisted.map((candidate) => {
+                const isExpanded = expandedCandidateId === candidate.id;
+                const missingSkills = candidate.skillGap.required.filter(
+                  (skill) => !candidate.skillGap.present.includes(skill),
+                );
+                const rankingIndex = shortlisted.findIndex((item) => item.id === candidate.id) + 1;
+
+                return (
+                  <li
+                    key={candidate.id}
+                    className="overflow-hidden rounded-4xl border border-white/10 bg-slate-900/60 shadow-card-soft backdrop-blur"
                   >
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <p className="text-base font-semibold text-gray-900">{candidate.name}</p>
-                        <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-600">
-                          Match {candidate.matchScore}%
-                        </span>
+                    <button
+                      type="button"
+                      className="w-full space-y-4 px-6 py-5 text-left transition hover:bg-white/5"
+                      onClick={() => setExpandedCandidateId(isExpanded ? null : candidate.id)}
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <p className="text-lg font-semibold text-white">{candidate.name}</p>
+                          <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-300/70">
+                            {candidate.experience}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="inline-flex items-center gap-2 rounded-full border border-success-300/60 bg-success-500/20 px-3 py-1 text-sm font-semibold text-success-100">
+                            <Star className="h-4 w-4" />
+                            {candidate.matchScore}%
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200/80">
+                            Ranked {rankingIndex}
+                          </span>
+                        </div>
                       </div>
-                      <p className="mt-1 text-sm text-gray-500">{candidate.experience}</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 text-xs text-slate-200/85">
                         {candidate.matchedSkills.map((skill) => (
-                          <span key={skill} className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                          <span
+                            key={skill}
+                            className="rounded-full border border-primary-400/40 bg-primary-500/10 px-3 py-1 font-medium text-primary-100"
+                          >
                             {skill}
                           </span>
                         ))}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-primary-600">
-                      <span>{isExpanded ? 'Hide insights' : 'See why matched'}</span>
-                      <ScrollText className="h-4 w-4" />
-                    </div>
-                  </button>
+                    </button>
 
-                  {isExpanded && candidate.summary && (
-                    <div className="mt-5 space-y-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
-                      <div className="grid gap-6 lg:grid-cols-5">
-                        <div className="space-y-4 lg:col-span-3">
-                          <div className="rounded-lg bg-white p-4 shadow-sm">
-                            <h3 className="flex items-center gap-2 text-sm font-semibold text-primary-600">
-                              <Sparkles className="h-4 w-4" />
-                              AI Generated Summary
-                            </h3>
-                            <p className="mt-2 text-sm text-gray-700">{candidate.summary}</p>
+                    {isExpanded && (
+                      <div className="space-y-5 border-t border-white/10 bg-white/5 px-6 py-5 text-sm text-slate-200/85">
+                        <p>{candidate.summary}</p>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/70">Strengths</p>
+                            <ul className="mt-3 space-y-2 text-sm">
+                              {candidate.skillGap.present.map((skill) => (
+                                <li key={skill} className="flex items-center gap-2 text-primary-100">
+                                  <Sparkles className="h-4 w-4" />
+                                  {skill}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
-                          {candidate.skillGap && (
-                            <div className="rounded-lg bg-white p-4 shadow-sm">
-                              <h3 className="flex items-center gap-2 text-sm font-semibold text-primary-600">
-                                <Filter className="h-4 w-4" />
-                                Skill Gap Analysis
-                              </h3>
-                              <div className="mt-4 space-y-3">
-                                {requiredSkills.map((skill) => {
-                                  const hasSkill = candidate.skillGap?.present.includes(skill);
-                                  return (
-                                    <div key={skill} className="flex items-center justify-between text-sm text-gray-700">
-                                      <span>{skill}</span>
-                                      <span className={`text-xs font-medium ${hasSkill ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                        {hasSkill ? 'Present' : 'Gap'}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="lg:col-span-2">
-                          <div className="flex h-full flex-col rounded-lg bg-white p-4 shadow-sm">
-                            <h3 className="flex items-center gap-2 text-sm font-semibold text-primary-600">
-                              <FileText className="h-4 w-4" />
-                              Extracted CV Text
-                            </h3>
-                            <p className="mt-2 flex-1 text-sm text-gray-600">{candidate.cvText}</p>
+                          <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/70">
+                              Opportunity areas
+                            </p>
+                            <ul className="mt-3 space-y-2 text-sm">
+                              {missingSkills.length > 0 ? (
+                                missingSkills.map((skill) => (
+                                  <li key={skill} className="flex items-center gap-2 text-accent-100">
+                                    <Filter className="h-4 w-4" />
+                                    {skill}
+                                  </li>
+                                ))
+                              ) : (
+                                <li className="text-slate-300/80">No gaps detected for required skills.</li>
+                              )}
+                            </ul>
                           </div>
                         </div>
+
+                        <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-4 text-sm text-slate-200/80">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/60">
+                            CV highlights
+                          </p>
+                          <p className="mt-2 leading-relaxed">{candidate.cvText}</p>
+                          <button className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/25 hover:bg-white/10">
+                            <ScrollText className="h-4 w-4" />
+                            Open full CV
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap justify-end gap-3">
-                        <button className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-                          <Download className="mr-2 h-4 w-4" />
-                          Export to PDF
-                        </button>
-                        <button className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-                          <FileText className="mr-2 h-4 w-4" />
-                          Export to Excel
-                        </button>
-                        <button className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700">
-                          Shortlist candidate
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <aside className="space-y-6">
+            <div className="space-y-5 rounded-4xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur">
+              <h3 className="text-lg font-semibold text-white">Processing summary</h3>
+              <div className="space-y-3 text-sm text-slate-200/80">
+                <p>
+                  <span className="font-semibold text-white">Top match:</span>{' '}
+                  {topCandidate ? `${topCandidate.name} - ${topCandidate.matchScore}%` : 'Pending'}
+                </p>
+                <p>
+                  <span className="font-semibold text-white">Skill coverage:</span>{' '}
+                  {averageCoverage !== null ? `${averageCoverage}%` : '--'} average across shortlist
+                </p>
+                <p>
+                  <span className="font-semibold text-white">Filtering:</span> Sorted by{' '}
+                  {sortBy === 'score' ? 'match score' : 'candidate name'}
+                  {skillFilter ? ` - Filtered on "${skillFilter}"` : ' - No skill filter applied'}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-4 rounded-4xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur">
+              <h3 className="text-lg font-semibold text-white">Core skill blueprint</h3>
+              <ul className="space-y-3 text-sm text-slate-200/80">
+                {requiredSkills.map((skill) => (
+                  <li
+                    key={skill}
+                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2"
+                  >
+                    <Star className="h-4 w-4 text-primary-200" />
+                    {skill}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="space-y-4 rounded-4xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur">
+              <h3 className="text-lg font-semibold text-white">Next steps</h3>
+              <p className="text-sm text-slate-200/80">
+                Share the shortlist with hiring managers or rerun the job with refined weighting to surface alternative
+                profiles.
+              </p>
+              <div className="flex flex-col gap-3 text-xs font-semibold uppercase tracking-wide">
+                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-primary-400/50 bg-primary-500/20 px-4 py-2 text-primary-100 shadow-glow-primary transition hover:border-primary-400/70 hover:bg-primary-500/30">
+                  <Sparkles className="h-4 w-4" />
+                  Rerun with new weights
+                </button>
+                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-white transition hover:border-white/25 hover:bg-white/10">
+                  <FileBarChart className="h-4 w-4" />
+                  Share analytics
+                </button>
+              </div>
+            </div>
+          </aside>
+        </section>
       </div>
     </Layout>
   );

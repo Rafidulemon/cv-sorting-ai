@@ -1,16 +1,29 @@
-'use client';
+﻿'use client';
 
 import type { ChangeEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, FileSearch, FileText, Loader2, UploadCloud, FileUp, LinkIcon } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileSearch,
+  FileText,
+  FileUp,
+  LinkIcon,
+  Loader2,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
+  UploadCloud,
+  X,
+} from 'lucide-react';
 import Layout from '../../components/Layout';
 
 type AiFieldKey = 'title' | 'responsibilities' | 'skills' | 'experienceLevel' | 'companyCulture';
 
 const steps = [
-  { id: 1, title: 'Job Description', description: 'Craft or upload the job specification.' },
-  { id: 2, title: 'Candidate Upload', description: 'Provide CVs and configure the shortlist.' },
+  { id: 1, title: 'Craft your role', description: 'Use AI or upload an existing description.' },
+  { id: 2, title: 'Upload candidates', description: 'Add CVs and fine tune how many to shortlist.' },
 ];
 
 const aiFields: Array<{
@@ -22,31 +35,31 @@ const aiFields: Array<{
 }> = [
   {
     key: 'title',
-    label: 'Job Title',
+    label: 'Job title',
     placeholder: 'e.g. Senior Backend Engineer',
   },
   {
     key: 'responsibilities',
-    label: 'Key Responsibilities',
-    placeholder: 'List responsibilities separated by a new line.',
+    label: 'Key responsibilities',
+    placeholder: 'List each responsibility on a new line.',
     type: 'textarea',
   },
   {
     key: 'skills',
-    label: 'Required Skills',
+    label: 'Required skills',
     placeholder: 'Comma separated list of must-have skills.',
     type: 'textarea',
   },
   {
     key: 'experienceLevel',
-    label: 'Experience Level',
+    label: 'Experience level',
     placeholder: '',
     type: 'select',
   },
   {
     key: 'companyCulture',
-    label: 'Company Culture',
-    placeholder: 'Describe the culture, values, and working style.',
+    label: 'Culture & environment',
+    placeholder: 'Describe what makes the team unique and how you work together.',
     type: 'textarea',
   },
 ];
@@ -72,7 +85,10 @@ export default function NewJobPage() {
   const [zipFileName, setZipFileName] = useState<string | null>(null);
   const [driveLink, setDriveLink] = useState('');
   const [topCandidates, setTopCandidates] = useState(25);
+
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [processingState, setProcessingState] = useState<'idle' | 'processing' | 'complete'>('idle');
+  const [progress, setProgress] = useState(0);
 
   const costUsage = useMemo(() => {
     const base = uploadedFiles.length || 47;
@@ -81,8 +97,7 @@ export default function NewJobPage() {
 
   const currentField = aiFields[aiStep];
   const canProceedToUpload =
-    currentSection === 'description' &&
-    (mode === 'ai' ? Boolean(generatedJD) : Boolean(uploadedJdFileName));
+    currentSection === 'description' && (mode === 'ai' ? Boolean(generatedJD) : Boolean(uploadedJdFileName));
 
   const handleAiChange = (value: string) => {
     setAiForm((prev) => ({ ...prev, [currentField.key]: value }));
@@ -99,15 +114,15 @@ export default function NewJobPage() {
     const template = [
       `${aiForm.title || 'Role TBD'}`,
       '',
-      'Key Responsibilities:',
-      ...formatList(aiForm.responsibilities).map((item) => `• ${item}`),
+      'Key responsibilities:',
+      ...formatList(aiForm.responsibilities).map((item) => `- ${item}`),
       '',
-      'Required Skills:',
-      ...formatList(aiForm.skills).map((item) => `• ${item}`),
+      'Required skills:',
+      ...formatList(aiForm.skills).map((item) => `- ${item}`),
       '',
-      `Experience Level: ${aiForm.experienceLevel}`,
+      `Experience level: ${aiForm.experienceLevel}`,
       '',
-      'Company Culture & Environment:',
+      'Company culture & environment:',
       aiForm.companyCulture || 'Add more context to tailor the AI screening.',
     ]
       .filter(Boolean)
@@ -126,136 +141,210 @@ export default function NewJobPage() {
   };
 
   const handleZipUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files || !event.target.files[0]) return;
-    setZipFileName(event.target.files[0].name);
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setZipFileName(file.name);
   };
 
-  const handleJdUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files || !event.target.files[0]) return;
-    const file = event.target.files[0];
-    setUploadedJdFileName(file.name);
-    const fallbackContent = `${file.name} uploaded. AI summary will be available after parsing.`;
-    setGeneratedJD(fallbackContent);
+  const handleRemoveFile = (fileName: string) => {
+    setUploadedFiles((prev) => prev.filter((name) => name !== fileName));
   };
 
-  const handleNextSection = () => {
-    if (currentSection === 'description') {
-      setCurrentSection('upload');
+  useEffect(() => {
+    if (processingState !== 'processing') return;
+
+    const duration = 6000;
+    const start = performance.now();
+    let frameId = requestAnimationFrame(step);
+
+    function step(now: number) {
+      const elapsed = now - start;
+      const next = Math.min(100, (elapsed / duration) * 100);
+      setProgress(next);
+
+      if (elapsed >= duration) {
+        setProgress(100);
+        setProcessingState('complete');
+        return;
+      }
+
+      frameId = requestAnimationFrame(step);
     }
+
+    return () => cancelAnimationFrame(frameId);
+  }, [processingState]);
+
+  const startProcessing = () => {
+    setProgress(0);
+    setProcessingState('processing');
+  };
+
+  const handleCloseOverlay = () => {
+    setShowConfirmation(false);
+    setProcessingState('idle');
+    setProgress(0);
   };
 
   return (
     <Layout>
-      <div className="mb-8 flex items-center gap-3 text-sm text-gray-500">
-        <Link href="/dashboard" className="inline-flex items-center text-primary-600 hover:text-primary-700">
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Back to dashboard
-        </Link>
-        <span>•</span>
-        <span>Create New Job</span>
-      </div>
-
-      <div className="flex flex-col gap-8 lg:flex-row">
-        <aside className="lg:w-72">
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-gray-900">Setup Progress</h2>
-            <ol className="mt-4 space-y-6">
-              {steps.map((step, index) => {
-                const isActive = currentSection === 'description' ? index === 0 : index === 1;
-                const isCompleted = currentSection === 'upload' && index === 0;
-                return (
-                  <li key={step.id} className="flex items-start gap-3">
-                    <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm font-semibold ${
-                        isActive
-                          ? 'border-primary-600 bg-primary-50 text-primary-600'
-                          : isCompleted
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-600'
-                          : 'border-gray-200 text-gray-400'
-                      }`}
-                    >
-                      {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : step.id}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{step.title}</p>
-                      <p className="text-xs text-gray-500">{step.description}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+      <div className="space-y-12 text-slate-100">
+        <section className="relative overflow-hidden rounded-4xl border border-white/10 bg-gradient-to-br from-primary-700 via-primary-500 to-accent-500 p-8 shadow-glow-primary">
+          <div className="pointer-events-none absolute inset-0 opacity-70">
+            <div className="absolute -top-24 right-8 h-56 w-56 rounded-full bg-white/20 blur-3xl" />
+            <div className="absolute -bottom-16 left-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
           </div>
-        </aside>
-
-        <section className="flex-1 space-y-8">
-          {currentSection === 'description' ? (
-            <div className="space-y-8">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <button
-                  onClick={() => setMode('ai')}
-                  className={`flex flex-col items-start rounded-xl border p-5 text-left ${
-                    mode === 'ai'
-                      ? 'border-primary-500 bg-primary-50 shadow-sm'
-                      : 'border-gray-200 bg-white hover:border-primary-200 hover:bg-primary-50/50'
-                  }`}
-                >
-                  <FileSearch className="mb-4 h-6 w-6 text-primary-600" />
-                  <h3 className="text-base font-semibold text-gray-900">Generate with AI</h3>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Answer a few questions and let the assistant draft a tailored job description.
-                  </p>
-                </button>
-                <button
-                  onClick={() => setMode('upload')}
-                  className={`flex flex-col items-start rounded-xl border p-5 text-left ${
-                    mode === 'upload'
-                      ? 'border-primary-500 bg-primary-50 shadow-sm'
-                      : 'border-gray-200 bg-white hover:border-primary-200 hover:bg-primary-50/50'
-                  }`}
-                >
-                  <FileText className="mb-4 h-6 w-6 text-primary-600" />
-                  <h3 className="text-base font-semibold text-gray-900">Upload your JD</h3>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Already have a JD? Upload the document and move straight to candidate uploads.
-                  </p>
-                </button>
+          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/85 transition hover:border-white/30 hover:bg-white/20"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to dashboard
+              </Link>
+              <h1 className="text-3xl font-semibold leading-tight text-white lg:text-4xl">
+                Launch a new sorting workflow
+              </h1>
+              <p className="max-w-2xl text-sm text-white/85 lg:text-base">
+                Guide the AI recruiter with rich job context, upload your candidate pool, and tailor the shortlist in a
+                couple of focused steps.
+              </p>
+              <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-white/75">
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Guided workflow
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Privacy safe
+                </span>
               </div>
+            </div>
+            <div className="grid gap-4 rounded-3xl border border-white/20 bg-white/15 p-6 text-sm text-white backdrop-blur lg:w-80">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">Run summary preview</p>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>CVs ready</span>
+                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
+                    {uploadedFiles.length || 47}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Target shortlist</span>
+                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">{topCandidates}</span>
+                </div>
+              </div>
+              <p className="text-xs text-white/75">
+                You can revisit and edit job settings at any time once the workflow is live.
+              </p>
+            </div>
+          </div>
+        </section>
 
-              {mode === 'ai' ? (
-                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-primary-600">Step {aiStep + 1} of {aiFields.length}</p>
-                      <h2 className="mt-1 text-xl font-semibold text-gray-900">AI Job Description Builder</h2>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Provide structured context so the assistant can craft a polished description.
-                      </p>
+        <section className="grid gap-4 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur md:grid-cols-2">
+          {steps.map((step) => {
+            const isActive =
+              (step.id === 1 && currentSection === 'description') || (step.id === 2 && currentSection === 'upload');
+            return (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => setCurrentSection(step.id === 1 ? 'description' : 'upload')}
+                className={`group flex flex-col items-start gap-2 rounded-2xl border border-white/10 p-5 text-left transition ${
+                  isActive
+                    ? 'bg-gradient-to-br from-primary-500/30 via-primary-500/10 to-transparent text-white shadow-glow-primary'
+                    : 'bg-white/5 text-slate-200/80 hover:bg-white/10'
+                }`}
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-sm font-semibold text-white">
+                  {step.id}
+                </span>
+                <p className="text-base font-semibold text-white">{step.title}</p>
+                <p className="text-sm leading-relaxed text-slate-200/80">{step.description}</p>
+              </button>
+            );
+          })}
+        </section>
+
+        <section className="space-y-8">
+          {currentSection === 'description' ? (
+            <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setMode('ai')}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                      mode === 'ai'
+                        ? 'border-primary-400/50 bg-primary-500/20 text-primary-100 shadow-glow-primary'
+                        : 'border-white/15 bg-white/5 text-slate-200/80 hover:border-white/25 hover:bg-white/10'
+                    }`}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Compose with AI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode('upload')}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                      mode === 'upload'
+                        ? 'border-accent-400/50 bg-accent-500/20 text-white shadow-glow-accent'
+                        : 'border-white/15 bg-white/5 text-slate-200/80 hover:border-white/25 hover:bg-white/10'
+                    }`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Upload description
+                  </button>
+                </div>
+
+                {mode === 'ai' ? (
+                  <div className="relative overflow-hidden rounded-4xl border border-white/10 bg-slate-900/60 p-8 shadow-card-soft backdrop-blur">
+                    <div className="pointer-events-none absolute inset-0">
+                      <div className="absolute -top-10 right-0 h-36 w-36 rounded-full bg-primary-500/20 blur-3xl" />
                     </div>
-                    {generatedJD && (
-                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                        Draft ready
-                      </span>
-                    )}
-                  </div>
+                    <div className="relative space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/70">
+                            Step {aiStep + 1} of {aiFields.length}
+                          </p>
+                          <h2 className="mt-2 text-lg font-semibold text-white">{currentField.label}</h2>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-300/70">
+                          <button
+                            type="button"
+                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 transition hover:border-white/20 hover:bg-white/10"
+                            onClick={() => setAiStep((prev) => Math.max(0, prev - 1))}
+                            disabled={aiStep === 0}
+                          >
+                            Back
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full border border-primary-400/50 bg-primary-500/20 px-3 py-1.5 text-primary-100 transition hover:border-primary-400/70 hover:bg-primary-500/30"
+                            onClick={() => setAiStep((prev) => Math.min(aiFields.length - 1, prev + 1))}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
 
-                  <div className="mt-6 space-y-6">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">{currentField.label}</label>
                       {currentField.type === 'textarea' ? (
                         <textarea
+                          rows={5}
                           value={aiForm[currentField.key]}
                           onChange={(event) => handleAiChange(event.target.value)}
-                          className="mt-2 h-32 w-full resize-none rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
                           placeholder={currentField.placeholder}
+                          className="min-h-[160px] w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white placeholder:text-slate-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-400/40"
                         />
                       ) : currentField.type === 'select' ? (
                         <select
                           value={aiForm[currentField.key]}
                           onChange={(event) => handleAiChange(event.target.value)}
-                          className="mt-2 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                          className="w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-400/40"
                         >
                           {experienceOptions.map((option) => (
-                            <option key={option} value={option}>
+                            <option key={option} value={option} className="bg-slate-900 text-white">
                               {option}
                             </option>
                           ))}
@@ -264,219 +353,311 @@ export default function NewJobPage() {
                         <input
                           value={aiForm[currentField.key]}
                           onChange={(event) => handleAiChange(event.target.value)}
-                          className="mt-2 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
                           placeholder={currentField.placeholder}
-                          type="text"
+                          className="w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white placeholder:text-slate-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-400/40"
                         />
                       )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        className="text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50"
-                        onClick={() => setAiStep((prev) => Math.max(prev - 1, 0))}
-                        disabled={aiStep === 0}
-                      >
-                        Back
-                      </button>
-                      {aiStep === aiFields.length - 1 ? (
+
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-slate-300/75">
+                          We&apos;ll stitch the answers together and auto-fill any gaps with best-practice language.
+                        </p>
                         <button
                           type="button"
-                          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-60"
                           onClick={handleGenerate}
-                          disabled={isGenerating}
+                          className="inline-flex items-center gap-2 rounded-full border border-primary-400/50 bg-primary-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary-100 transition hover:border-primary-400/70 hover:bg-primary-500/30"
                         >
-                          {isGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Generate with AI
+                          {isGenerating ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Crafting
+                            </>
+                          ) : (
+                            <>
+                              <Rocket className="h-4 w-4" />
+                              Generate draft
+                            </>
+                          )}
                         </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-60"
-                          onClick={() => setAiStep((prev) => Math.min(prev + 1, aiFields.length - 1))}
-                        >
-                          Next question
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {generatedJD && (
-                    <div className="mt-6">
-                      <label className="text-sm font-medium text-gray-700">AI Generated JD</label>
-                      <textarea
-                        className="mt-2 h-56 w-full resize-none rounded-lg border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
-                        value={generatedJD}
-                        onChange={(event) => setGeneratedJD(event.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-primary-300 bg-primary-50 p-10 text-center shadow-sm">
-                  <UploadCloud className="mx-auto h-12 w-12 text-primary-500" />
-                  <h2 className="mt-4 text-xl font-semibold text-gray-900">Upload your job description</h2>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Drag and drop a .txt or .docx file, or select one from your device.
-                  </p>
-                  <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-                    <label className="inline-flex cursor-pointer items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">
-                      <FileUp className="mr-2 h-4 w-4" />
-                      Select file
-                      <input
-                        type="file"
-                        accept=".txt,.doc,.docx"
-                        className="sr-only"
-                        onChange={handleJdUpload}
-                      />
-                    </label>
-                  </div>
-                  {uploadedJdFileName && (
-                    <p className="mt-4 text-sm text-primary-700">Uploaded: {uploadedJdFileName}</p>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end">
-                <button
-                  type="button"
-                  onClick={handleNextSection}
-                  disabled={!canProceedToUpload}
-                  className="inline-flex items-center rounded-md bg-gray-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Continue to uploads
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-10">
-              <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-semibold text-gray-900">Upload Candidate CVs</h2>
-                <p className="mt-1 text-sm text-gray-600">
-                  Upload individual files, import a zip, or share a cloud folder. We will parse and deduplicate automatically.
-                </p>
-
-                <div className="mt-6 grid gap-6 lg:grid-cols-[2fr,1fr]">
-                  <div className="rounded-xl border border-dashed border-primary-300 bg-primary-50 p-8 text-center">
-                    <UploadCloud className="mx-auto h-12 w-12 text-primary-500" />
-                    <h3 className="mt-3 text-base font-semibold text-gray-900">Drag & drop CVs</h3>
-                    <p className="mt-2 text-sm text-gray-600">
-                      Supports .pdf, .docx, and .txt. You can select multiple files at once.
-                    </p>
-                    <label className="mt-6 inline-flex cursor-pointer items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">
-                      Add files
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,.txt"
-                        multiple
-                        className="sr-only"
-                        onChange={handleUploadFiles}
-                      />
-                    </label>
-                  </div>
-                  <div className="space-y-4">
-                    <label className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                      <span className="text-sm font-medium text-gray-700">Upload a .zip archive</span>
-                      <span className="text-xs text-gray-500">We will unpack and process every CV inside.</span>
-                      <div className="mt-2 flex items-center justify-between rounded-md border border-dashed border-gray-300 px-3 py-2">
-                        <span className="text-xs text-gray-500">{zipFileName || 'No zip selected yet.'}</span>
-                        <label className="inline-flex cursor-pointer items-center rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800">
-                          Browse
-                          <input type="file" accept=".zip" className="sr-only" onChange={handleZipUpload} />
-                        </label>
                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <label className="group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-4xl border border-dashed border-white/20 bg-white/5 p-8 text-center text-sm text-slate-200/80 transition hover:border-white/35 hover:bg-white/10">
+                      <UploadCloud className="h-10 w-10 text-primary-200" />
+                      <div>
+                        <p className="text-base font-semibold text-white">Drag &amp; drop</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Upload a PDF or DOCX job description to brief the AI.
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          setUploadedJdFileName(file.name);
+                        }}
+                      />
                     </label>
-                    <label className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                      <span className="text-sm font-medium text-gray-700">Google Drive folder link</span>
-                      <span className="text-xs text-gray-500">Ensure the folder is shared with view access.</span>
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary-50 text-primary-600">
-                          <LinkIcon className="h-5 w-5" />
-                        </span>
+                    <div className="rounded-4xl border border-white/10 bg-slate-900/60 p-6 text-sm text-slate-200/80 shadow-card-soft">
+                      <p className="text-base font-semibold text-white">Prefer a link?</p>
+                      <p className="mt-2 text-xs text-slate-400">
+                        Paste the public URL to your job specification and we&apos;ll fetch it securely.
+                      </p>
+                      <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4">
+                        <LinkIcon className="h-4 w-4 text-primary-200" />
                         <input
                           type="url"
-                          value={driveLink}
-                          onChange={(event) => setDriveLink(event.target.value)}
-                          placeholder="https://drive.google.com/..."
-                          className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                          placeholder="https://company.com/jobs/backend-engineer"
+                          className="flex-1 bg-transparent py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none"
                         />
                       </div>
-                    </label>
-                  </div>
-                </div>
-
-                {uploadedFiles.length > 0 && (
-                  <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <p className="text-sm font-semibold text-gray-700">Files queued ({uploadedFiles.length})</p>
-                    <ul className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
-                      {uploadedFiles.map((file) => (
-                        <li key={file} className="truncate rounded-md bg-white px-3 py-2 shadow-sm">
-                          {file}
-                        </li>
-                      ))}
-                    </ul>
+                      {uploadedJdFileName && (
+                        <div className="mt-6 rounded-2xl border border-primary-400/40 bg-primary-500/10 px-4 py-3 text-xs font-medium text-primary-100">
+                          Uploaded: {uploadedJdFileName}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-semibold text-gray-900">Ranking Configuration</h2>
-                <p className="mt-1 text-sm text-gray-600">
-                  Choose how many candidates to shortlist. You can always re-run with different settings.
-                </p>
-
-                <div className="mt-6 space-y-6">
-                  <div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-gray-700">Number of Top Candidates to Return</span>
-                      <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-600">
-                        {topCandidates} candidates
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={5}
-                      max={50}
-                      step={5}
-                      value={topCandidates}
-                      onChange={(event) => setTopCandidates(Number(event.target.value))}
-                      className="mt-4 w-full accent-primary-600"
-                    />
-                    <div className="mt-2 flex justify-between text-xs text-gray-500">
-                      {[10, 25, 50].map((mark) => (
-                        <span key={mark}>{mark}</span>
-                      ))}
-                    </div>
+              <div className="space-y-6">
+                <div className="relative overflow-hidden rounded-4xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur">
+                  <div className="pointer-events-none absolute inset-0">
+                    <div className="absolute -top-8 left-16 h-32 w-32 rounded-full bg-primary-500/15 blur-3xl" />
                   </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                    <div>
-                      <p className="font-semibold text-gray-900">Usage preview</p>
-                      <p className="text-xs text-gray-500">
-                        Estimated credits consumed for this run.
-                      </p>
+                  <div className="relative space-y-5">
+                    <div className="flex items-center gap-3">
+                      <FileSearch className="h-5 w-5 text-primary-200" />
+                      <h2 className="text-lg font-semibold text-white">Preview draft</h2>
                     </div>
-                    <div className="rounded-full bg-white px-4 py-2 text-sm font-medium text-primary-600 shadow-sm">
-                      {costUsage.consumed} of {costUsage.total} monthly CVs
+                    <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-xs leading-relaxed text-slate-200/80">
+                      {mode === 'ai' ? (
+                        generatedJD ? (
+                          <pre className="whitespace-pre-wrap font-sans text-slate-200/85">{generatedJD}</pre>
+                        ) : (
+                          <p className="text-slate-400">
+                            Complete the prompts and generate a draft to review the AI&apos;s language.
+                          </p>
+                        )
+                      ) : uploadedJdFileName ? (
+                        <p className="text-slate-200/85">
+                          <span className="font-semibold text-white">{uploadedJdFileName}</span> ready. We&apos;ll parse
+                          this description automatically.
+                        </p>
+                      ) : (
+                        <p className="text-slate-400">Upload a description to preview it here.</p>
+                      )}
+                    </div>
+                    <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-xs text-slate-300/80">
+                      <p className="font-semibold text-white">Tips for higher signal</p>
+                      <ul className="mt-2 space-y-2">
+                        <li>- Specify success metrics or KPIs for the first 90 days.</li>
+                        <li>- Highlight collaboration rituals: standups, pairing, async updates.</li>
+                        <li>- Call out unique perks or culture markers to boost relevance.</li>
+                      </ul>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-gray-500 hover:text-gray-700"
-                    onClick={() => setCurrentSection('description')}
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-md bg-primary-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-                    onClick={() => setShowConfirmation(true)}
-                  >
-                    Start Sorting
-                  </button>
+                <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200/80">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/70">Next step</p>
+                  <p className="text-sm text-slate-300/80">
+                    Move to candidate upload once your description feels complete. You can toggle back to adjust details
+                    without losing any progress.
+                  </p>
+                  <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentSection('upload')}
+                      disabled={!canProceedToUpload}
+                      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                        canProceedToUpload
+                          ? 'border border-primary-400/50 bg-primary-500/20 text-primary-100 shadow-glow-primary hover:border-primary-400/70 hover:bg-primary-500/30'
+                          : 'border border-white/10 bg-white/5 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Proceed to upload
+                      <ArrowLeft className="h-4 w-4 rotate-180" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+              <div className="space-y-6">
+                <div className="relative overflow-hidden rounded-4xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur">
+                  <div className="pointer-events-none absolute inset-0">
+                    <div className="absolute -top-12 right-16 h-40 w-40 rounded-full bg-primary-500/15 blur-3xl" />
+                  </div>
+                  <div className="relative space-y-6">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-lg font-semibold text-white">Candidate intake</h2>
+                        <p className="text-sm text-slate-300/80">Upload CVs or share a drive folder.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentSection('description')}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/25 hover:bg-white/10"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Edit description
+                      </button>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <label className="group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-white/20 bg-white/5 p-8 text-center text-sm text-slate-200/80 transition hover:border-white/35 hover:bg-white/10">
+                        <FileUp className="h-10 w-10 text-primary-200" />
+                        <div>
+                          <p className="text-base font-semibold text-white">Drag &amp; drop CVs</p>
+                          <p className="mt-1 text-xs text-slate-400">PDF, DOCX, or TXT up to 20MB each.</p>
+                        </div>
+                        <input type="file" multiple className="hidden" onChange={handleUploadFiles} />
+                      </label>
+                      <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200/80">
+                        <p className="text-base font-semibold text-white">Upload a ZIP</p>
+                        <p className="mt-2 text-xs text-slate-400">
+                          Bundle a folder of CVs. We&apos;ll unpack and deduplicate automatically.
+                        </p>
+                        <label className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/25 hover:bg-white/20">
+                          <UploadCloud className="h-4 w-4" />
+                          Choose ZIP
+                          <input type="file" accept=".zip" className="hidden" onChange={handleZipUpload} />
+                        </label>
+                        {zipFileName && (
+                          <p className="mt-4 rounded-2xl border border-primary-400/40 bg-primary-500/10 px-3 py-2 text-xs font-medium text-primary-100">
+                            {zipFileName}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200/75">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/60">
+                        Optional drive link
+                      </p>
+                      <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4">
+                        <LinkIcon className="h-4 w-4 text-primary-200" />
+                        <input
+                          value={driveLink}
+                          onChange={(event) => setDriveLink(event.target.value)}
+                          placeholder="https://drive.google.com/..."
+                          className="flex-1 bg-transparent py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none"
+                        />
+                      </div>
+                      <p className="mt-3 text-xs text-slate-400">
+                        We&apos;ll sync new CVs from this location before each rerun.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative overflow-hidden rounded-4xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur">
+                  <div className="pointer-events-none absolute inset-0">
+                    <div className="absolute -bottom-14 right-12 h-40 w-40 rounded-full bg-accent-500/20 blur-3xl" />
+                  </div>
+                  <div className="relative space-y-6">
+                    <h3 className="text-lg font-semibold text-white">Files queued</h3>
+                    {uploadedFiles.length === 0 ? (
+                      <p className="text-sm text-slate-400">No CVs added yet. Drop files above to populate the list.</p>
+                    ) : (
+                      <ul className="space-y-3 text-sm">
+                        {uploadedFiles.map((file) => (
+                          <li
+                            key={file}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200/80"
+                          >
+                            <span className="truncate">{file}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFile(file)}
+                              className="rounded-full border border-white/10 p-1 text-slate-300/70 transition hover:border-white/20 hover:text-white"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="rounded-4xl border border-white/10 bg-slate-900/60 p-6 shadow-card-soft backdrop-blur">
+                  <h3 className="text-lg font-semibold text-white">Ranking configuration</h3>
+                  <p className="mt-1 text-sm text-slate-300/80">
+                    Choose how many candidates to surface for the first pass. You can rerun with different limits whenever
+                    you like.
+                  </p>
+                  <div className="mt-6 space-y-6">
+                    <div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-white">Number of top candidates</span>
+                        <span className="rounded-full border border-primary-400/40 bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-100">
+                          {topCandidates} candidates
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={5}
+                        max={50}
+                        step={5}
+                        value={topCandidates}
+                        onChange={(event) => setTopCandidates(Number(event.target.value))}
+                        className="mt-4 w-full accent-primary-400"
+                      />
+                      <div className="mt-2 flex justify-between text-[11px] text-slate-400">
+                        {[10, 25, 50].map((mark) => (
+                          <span key={mark}>{mark}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-xs text-slate-200/80">
+                      <p className="text-sm font-semibold text-white">Usage preview</p>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span>Estimated credits consumed</span>
+                        <span className="rounded-full border border-primary-400/40 bg-primary-500/10 px-4 py-1 text-xs font-semibold text-primary-100">
+                          {costUsage.consumed} of {costUsage.total}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-4 rounded-4xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200/85">
+                  <p>
+                    The AI will normalise each CV, score against your job factors, and provide reasoning for every
+                    recommendation.
+                  </p>
+                  <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentSection('description')}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/25 hover:bg-white/10"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowConfirmation(true);
+                        setProcessingState('idle');
+                      }}
+                      className="inline-flex items-center gap-2 rounded-full border border-primary-400/50 bg-primary-500/20 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-primary-100 shadow-glow-primary transition hover:border-primary-400/70 hover:bg-primary-500/30"
+                    >
+                      Start Sorting
+                      <Sparkles className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -485,56 +666,112 @@ export default function NewJobPage() {
       </div>
 
       {showConfirmation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 px-4">
-          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Confirm run</h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  We&apos;ll rank all uploaded CVs against your job description. This action can take a few minutes.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 backdrop-blur">
+          <div className="w-full max-w-xl overflow-hidden rounded-4xl border border-white/10 bg-slate-900/80 shadow-glow-primary backdrop-blur">
+            {processingState === 'idle' && (
+              <div className="space-y-6 p-8 text-slate-100">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Confirm run</h3>
+                    <p className="mt-1 text-sm text-slate-300/80">
+                      We&apos;ll rank all uploaded CVs against your description. This takes a few minutes.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseOverlay}
+                    className="rounded-full border border-white/10 p-2 text-slate-300/70 transition hover:border-white/20 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200/85">
+                  <div className="flex items-center justify-between">
+                    <span>CVs queued</span>
+                    <span className="font-semibold text-white">{uploadedFiles.length || 47}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Top candidates requested</span>
+                    <span className="font-semibold text-white">{topCandidates}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Credits consumed</span>
+                    <span className="font-semibold text-primary-100">
+                      {costUsage.consumed} of {costUsage.total}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 text-xs font-semibold uppercase tracking-wide">
+                  <button
+                    type="button"
+                    onClick={handleCloseOverlay}
+                    className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-white transition hover:border-white/25 hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startProcessing}
+                    className="inline-flex items-center gap-2 rounded-full border border-primary-400/50 bg-primary-500/20 px-5 py-2 text-primary-100 shadow-glow-primary transition hover:border-primary-400/70 hover:bg-primary-500/30"
+                  >
+                    Confirm &amp; run
+                    <Sparkles className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {processingState === 'processing' && (
+              <div className="space-y-6 p-8 text-slate-100">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary-200" />
+                  <h3 className="text-lg font-semibold text-white">Sorting in progress</h3>
+                </div>
+                <p className="text-sm text-slate-300/80">
+                  Analysing CVs, extracting entities, and scoring against your job blueprint. This usually takes around
+                  six minutes.
                 </p>
+                <div className="space-y-4">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary-400 via-primary-500 to-accent-500 transition-all duration-150"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-300/70">Progress - {progress.toFixed(0)}%</p>
+                </div>
               </div>
-              <button
-                type="button"
-                className="text-sm font-medium text-gray-400 hover:text-gray-600"
-                onClick={() => setShowConfirmation(false)}
-              >
-                Close
-              </button>
-            </div>
+            )}
 
-            <div className="mt-6 space-y-4 rounded-xl bg-gray-50 p-5">
-              <div className="flex items-center justify-between text-sm text-gray-700">
-                <span>CVs queued</span>
-                <span className="font-semibold text-gray-900">{uploadedFiles.length || 47}</span>
+            {processingState === 'complete' && (
+              <div className="space-y-6 p-8 text-slate-100">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-success-300" />
+                  <h3 className="text-lg font-semibold text-white">Sorting complete</h3>
+                </div>
+                <p className="text-sm text-slate-300/80">
+                  The shortlist is ready with explainable scores and auto-generated insights. Review the results to take
+                  action.
+                </p>
+                <div className="flex justify-end gap-3 text-xs font-semibold uppercase tracking-wide">
+                  <button
+                    type="button"
+                    onClick={handleCloseOverlay}
+                    className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-white transition hover:border-white/25 hover:bg-white/10"
+                  >
+                    Close
+                  </button>
+                  <Link
+                    href="/results/job-1042"
+                    onClick={handleCloseOverlay}
+                    className="inline-flex items-center gap-2 rounded-full border border-primary-400/50 bg-primary-500/20 px-5 py-2 text-primary-100 shadow-glow-primary transition hover:border-primary-400/70 hover:bg-primary-500/30"
+                  >
+                    View results
+                    <Sparkles className="h-4 w-4" />
+                  </Link>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-sm text-gray-700">
-                <span>Top candidates requested</span>
-                <span className="font-semibold text-gray-900">{topCandidates}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm text-gray-700">
-                <span>Credits consumed</span>
-                <span className="font-semibold text-primary-600">
-                  {costUsage.consumed} of {costUsage.total}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                className="text-sm font-medium text-gray-500 hover:text-gray-700"
-                onClick={() => setShowConfirmation(false)}
-              >
-                Cancel
-              </button>
-              <Link
-                href="/results/job-1042"
-                className="inline-flex items-center rounded-md bg-primary-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-              >
-                Confirm &amp; run
-              </Link>
-            </div>
+            )}
           </div>
         </div>
       )}
