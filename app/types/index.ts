@@ -17,7 +17,7 @@ export interface Candidate {
   experience?: string;
   education?: string;
   summary?: string;
-  skillGap?: {
+  skillGap: {
     required: string[];
     present: string[];
   };
