@@ -2,8 +2,8 @@
 @config "./tailwind.config.ts";
 
 :root {
-  --background: #050816;
-  --foreground: #f8fafc;
+  --background: #050b16;
+  --foreground: #dce8fa;
 }
 
 @theme inline {
@@ -16,16 +16,24 @@
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.35), transparent 55%),
-    radial-gradient(circle at 95% 5%, rgba(249, 115, 22, 0.25), transparent 60%),
-    radial-gradient(circle at 15% 75%, rgba(56, 189, 248, 0.2), transparent 55%),
-    #050816;
+    radial-gradient(circle at 16% 12%, rgba(56, 189, 248, 0.09), transparent 60%),
+    radial-gradient(circle at 88% 12%, rgba(14, 165, 233, 0.06), transparent 55%),
+    linear-gradient(180deg, rgba(5, 11, 22, 0.96), rgba(5, 11, 22, 1)),
+    linear-gradient(90deg, rgba(18, 35, 62, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(18, 35, 62, 0.1) 1px, transparent 1px);
+  background-size: auto, auto, auto, 36px 36px, 36px 36px;
+  background-position: top left, top right, center, top left, top left;
   color: var(--foreground);
+  color-scheme: dark;
   font-family: var(--font-sans), 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background-color: rgba(139, 92, 246, 0.35);
-  color: #ffffff;
+  background-color: rgba(56, 189, 248, 0.28);
+  color: #050b16;
+}
+
+.shadow-card-soft {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }

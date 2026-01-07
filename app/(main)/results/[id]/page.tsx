@@ -14,8 +14,7 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react';
-import Layout from '../../components/Layout';
-import type { Candidate } from '../../types';
+import type { Candidate } from '../../../types';
 
 const candidates: Candidate[] = [
   {
@@ -119,51 +118,50 @@ export default function ResultsPage() {
         );
 
   return (
-    <Layout>
-      <div className="space-y-12 text-slate-800">
-        <section className="relative overflow-hidden rounded-4xl border border-primary-100 bg-gradient-to-br from-primary-50 via-white to-accent-50 p-8 shadow-card-soft">
+    <div className="space-y-12 text-[#DCE8FA]">
+        <section className="relative overflow-hidden rounded-4xl border border-[#12233E]/80 bg-gradient-to-br from-[#0A1628] via-[#050B16] to-[#0A1628] p-8 shadow-card-soft">
           <div className="pointer-events-none absolute inset-0 opacity-80">
-            <div className="absolute -top-24 right-10 h-56 w-56 rounded-full bg-primary-200/45 blur-3xl" />
-            <div className="absolute -bottom-20 left-12 h-48 w-48 rounded-full bg-accent-200/35 blur-3xl" />
+            <div className="absolute -top-24 right-10 h-56 w-56 rounded-full bg-[#38BDF8]/15 blur-3xl" />
+            <div className="absolute -bottom-20 left-12 h-48 w-48 rounded-full bg-[#38BDF8]/12 blur-3xl" />
           </div>
           <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-4">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary-700 transition hover:bg-primary-50"
+                className="inline-flex items-center gap-2 rounded-full border border-[#38BDF8]/40 bg-[#38BDF8]/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#38BDF8] transition hover:bg-[#38BDF8]/20"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to dashboard
               </Link>
-              <h1 className="text-3xl font-semibold leading-tight text-slate-900 lg:text-4xl">
+              <h1 className="text-3xl font-semibold leading-tight text-[#DCE8FA] lg:text-4xl">
                 Results - {jobId ? decodeURIComponent(jobId) : 'Unknown job'}
               </h1>
-              <p className="max-w-2xl text-sm text-slate-600 lg:text-base">
+              <p className="max-w-2xl text-sm text-[#7F93AE] lg:text-base">
                 47 CVs analysed with semantic scoring, interview-readiness weighting, and bias safeguards. Refine the
                 shortlist or export the full audit trail.
               </p>
-              <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700">
-                  <Sparkles className="h-3.5 w-3.5 text-primary-600" />
+              <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-[#7F93AE]">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#12233E] bg-[#0A1628] px-3 py-1.5 text-[#DCE8FA]">
+                  <Sparkles className="h-3.5 w-3.5 text-[#38BDF8]" />
                   Semantic scoring
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700">
-                  <FileBarChart className="h-3.5 w-3.5 text-primary-600" />
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#12233E] bg-[#0A1628] px-3 py-1.5 text-[#DCE8FA]">
+                  <FileBarChart className="h-3.5 w-3.5 text-[#38BDF8]" />
                   Explainable ranking
                 </span>
               </div>
             </div>
-            <div className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-card-soft lg:w-80">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Quick actions</p>
-              <button className="inline-flex items-center justify-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary-700 transition hover:bg-primary-100">
+            <div className="grid gap-4 rounded-3xl border border-[#12233E] bg-[#0A1628] p-6 text-sm text-[#DCE8FA] shadow-card-soft lg:w-80">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4F627D]">Quick actions</p>
+              <button className="inline-flex items-center justify-center gap-2 rounded-full border border-[#38BDF8]/40 bg-[#38BDF8]/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#38BDF8] transition hover:bg-[#38BDF8]/20">
                 <Download className="h-4 w-4" />
                 Download full report
               </button>
-              <button className="inline-flex items-center justify-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary-700 transition hover:bg-primary-50">
+              <button className="inline-flex items-center justify-center gap-2 rounded-full border border-[#38BDF8]/40 bg-[#0A1628] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#38BDF8] transition hover:bg-[#38BDF8]/15">
                 <FileText className="h-4 w-4" />
                 Generate share link
               </button>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#4F627D]">
                 Includes candidate rationales, score breakdowns, and sourcing recommendations.
               </p>
             </div>
@@ -174,13 +172,13 @@ export default function ResultsPage() {
           {metrics.map((item) => (
             <div
               key={item.label}
-              className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-card-soft"
+              className="relative overflow-hidden rounded-3xl border border-[#12233E] bg-[#0A1628] p-6 shadow-card-soft"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-primary-50/70 via-white to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-br from-[#38BDF8]/15 via-transparent to-transparent" />
               <div className="relative space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{item.label}</p>
-                <p className="text-3xl font-semibold text-slate-900">{item.value}</p>
-                <p className="text-xs text-slate-600">{item.helper}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4F627D]">{item.label}</p>
+                <p className="text-3xl font-semibold text-[#DCE8FA]">{item.value}</p>
+                <p className="text-xs text-[#7F93AE]">{item.helper}</p>
               </div>
             </div>
           ))}
@@ -188,15 +186,15 @@ export default function ResultsPage() {
 
         <section className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
           <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-card-soft">
-              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#12233E] bg-[#0A1628] p-5 shadow-card-soft">
+              <div className="flex items-center gap-2 rounded-full border border-[#12233E] bg-[#0A1628] p-1">
                 <button
                   type="button"
                   onClick={() => setSortBy('score')}
                   className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
                     sortBy === 'score'
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'text-slate-600 hover:bg-primary-50 hover:text-primary-700'
+                      ? 'bg-[#38BDF8]/20 text-[#38BDF8]'
+                      : 'text-[#7F93AE] hover:bg-[#38BDF8]/15 hover:text-[#38BDF8]'
                   }`}
                 >
                   <ArrowUpDown className="h-3.5 w-3.5" />
@@ -207,26 +205,26 @@ export default function ResultsPage() {
                   onClick={() => setSortBy('name')}
                   className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
                     sortBy === 'name'
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'text-slate-600 hover:bg-primary-50 hover:text-primary-700'
+                      ? 'bg-[#38BDF8]/20 text-[#38BDF8]'
+                      : 'text-[#7F93AE] hover:bg-[#38BDF8]/15 hover:text-[#38BDF8]'
                   }`}
                 >
                   <ArrowUpDown className="h-3.5 w-3.5" />
                   Name
                 </button>
               </div>
-              <div className="flex min-w-[220px] flex-1 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-inner">
-                <Filter className="h-4 w-4 text-primary-400" />
+              <div className="flex min-w-[220px] flex-1 items-center gap-3 rounded-full border border-[#12233E] bg-[#0A1628] px-4 py-2 text-sm text-[#7F93AE] shadow-inner">
+                <Filter className="h-4 w-4 text-[#38BDF8]" />
                 <input
                   type="text"
                   value={skillFilter}
                   onChange={(event) => setSkillFilter(event.target.value)}
                   placeholder="Filter skills"
-                  className="flex-1 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+                  className="flex-1 bg-transparent text-sm text-[#DCE8FA] placeholder:text-[#4F627D] focus:outline-none"
                 />
               </div>
-              <button className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 transition hover:bg-primary-50 hover:text-primary-700">
-                <ScrollText className="h-4 w-4 text-primary-600" />
+              <button className="inline-flex items-center gap-2 rounded-full border border-[#12233E] bg-[#0A1628] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#DCE8FA] transition hover:bg-[#38BDF8]/15 hover:text-[#38BDF8]">
+                <ScrollText className="h-4 w-4 text-[#38BDF8]" />
                 View audit log
               </button>
             </div>
@@ -242,35 +240,35 @@ export default function ResultsPage() {
                 return (
                   <li
                     key={candidate.id}
-                    className="overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-card-soft"
+                    className="overflow-hidden rounded-4xl border border-[#12233E] bg-[#0A1628] shadow-card-soft"
                   >
                     <button
                       type="button"
-                      className="w-full space-y-4 px-6 py-5 text-left transition hover:bg-primary-50/70"
+                      className="w-full space-y-4 px-6 py-5 text-left transition hover:bg-[#38BDF8]/15"
                       onClick={() => setExpandedCandidateId(isExpanded ? null : candidate.id)}
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                          <p className="text-lg font-semibold text-slate-900">{candidate.name}</p>
-                          <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
+                          <p className="text-lg font-semibold text-[#DCE8FA]">{candidate.name}</p>
+                          <p className="text-xs font-medium uppercase tracking-[0.22em] text-[#4F627D]">
                             {candidate.experience}
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
-                          <span className="inline-flex items-center gap-2 rounded-full border border-success-200 bg-success-50 px-3 py-1 text-sm font-semibold text-success-700">
-                            <Star className="h-4 w-4 text-success-500" />
+                          <span className="inline-flex items-center gap-2 rounded-full border border-success-500/30 bg-success-500/10 px-3 py-1 text-sm font-semibold text-success-200">
+                            <Star className="h-4 w-4 text-success-400" />
                             {candidate.matchScore}%
                           </span>
-                          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+                          <span className="inline-flex items-center gap-2 rounded-full border border-[#12233E] bg-[#0A1628] px-3 py-1 text-xs text-[#7F93AE]">
                             Ranked {rankingIndex}
                           </span>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                      <div className="flex flex-wrap gap-2 text-xs text-[#7F93AE]">
                         {candidate.matchedSkills.map((skill) => (
                           <span
                             key={skill}
-                            className="rounded-full border border-primary-200 bg-primary-50 px-3 py-1 font-medium text-primary-700"
+                            className="rounded-full border border-[#38BDF8]/40 bg-[#38BDF8]/15 px-3 py-1 font-medium text-[#38BDF8]"
                           >
                             {skill}
                           </span>
@@ -279,47 +277,47 @@ export default function ResultsPage() {
                     </button>
 
                     {isExpanded && (
-                      <div className="space-y-5 border-t border-slate-200 bg-slate-50 px-6 py-5 text-sm text-slate-700">
+                      <div className="space-y-5 border-t border-[#12233E] bg-[#0A1628] px-6 py-5 text-sm text-[#DCE8FA]">
                         <p>{candidate.summary}</p>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                          <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Strengths</p>
+                          <div className="rounded-3xl border border-[#12233E] bg-[#0A1628] p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4F627D]">Strengths</p>
                             <ul className="mt-3 space-y-2 text-sm">
                               {candidate.skillGap.present.map((skill) => (
-                                <li key={skill} className="flex items-center gap-2 text-primary-600">
-                                  <Sparkles className="h-4 w-4 text-primary-500" />
+                                <li key={skill} className="flex items-center gap-2 text-[#38BDF8]">
+                                  <Sparkles className="h-4 w-4 text-[#38BDF8]" />
                                   {skill}
                                 </li>
                               ))}
                             </ul>
                           </div>
-                          <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                          <div className="rounded-3xl border border-[#12233E] bg-[#0A1628] p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4F627D]">
                               Opportunity areas
                             </p>
                             <ul className="mt-3 space-y-2 text-sm">
                               {missingSkills.length > 0 ? (
                                 missingSkills.map((skill) => (
-                                  <li key={skill} className="flex items-center gap-2 text-accent-600">
-                                    <Filter className="h-4 w-4 text-accent-500" />
+                                  <li key={skill} className="flex items-center gap-2 text-[#38BDF8]">
+                                    <Filter className="h-4 w-4 text-[#38BDF8]" />
                                     {skill}
                                   </li>
                                 ))
                               ) : (
-                                <li className="text-slate-500">No gaps detected for required skills.</li>
+                                <li className="text-[#4F627D]">No gaps detected for required skills.</li>
                               )}
                             </ul>
                           </div>
                         </div>
 
-                        <div className="rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        <div className="rounded-3xl border border-[#12233E] bg-[#0A1628] p-4 text-sm text-[#DCE8FA]">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4F627D]">
                             CV highlights
                           </p>
-                          <p className="mt-2 leading-relaxed text-slate-600">{candidate.cvText}</p>
-                          <button className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 transition hover:bg-primary-50 hover:text-primary-700">
-                            <ScrollText className="h-4 w-4 text-primary-600" />
+                          <p className="mt-2 leading-relaxed text-[#7F93AE]">{candidate.cvText}</p>
+                          <button className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#12233E] bg-[#0A1628] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#DCE8FA] transition hover:bg-[#38BDF8]/15 hover:text-[#38BDF8]">
+                            <ScrollText className="h-4 w-4 text-[#38BDF8]" />
                             Open full CV
                           </button>
                         </div>
@@ -332,58 +330,57 @@ export default function ResultsPage() {
           </div>
 
           <aside className="space-y-6">
-            <div className="space-y-5 rounded-4xl border border-slate-200 bg-white p-6 shadow-card-soft">
-              <h3 className="text-lg font-semibold text-slate-900">Processing summary</h3>
-              <div className="space-y-3 text-sm text-slate-600">
+            <div className="space-y-5 rounded-4xl border border-[#12233E] bg-[#0A1628] p-6 shadow-card-soft">
+              <h3 className="text-lg font-semibold text-[#DCE8FA]">Processing summary</h3>
+              <div className="space-y-3 text-sm text-[#7F93AE]">
                 <p>
-                  <span className="font-semibold text-slate-900">Top match:</span>{' '}
+                  <span className="font-semibold text-[#DCE8FA]">Top match:</span>{' '}
                   {topCandidate ? `${topCandidate.name} - ${topCandidate.matchScore}%` : 'Pending'}
                 </p>
                 <p>
-                  <span className="font-semibold text-slate-900">Skill coverage:</span>{' '}
+                  <span className="font-semibold text-[#DCE8FA]">Skill coverage:</span>{' '}
                   {averageCoverage !== null ? `${averageCoverage}%` : '--'} average across shortlist
                 </p>
                 <p>
-                  <span className="font-semibold text-slate-900">Filtering:</span> Sorted by{' '}
+                  <span className="font-semibold text-[#DCE8FA]">Filtering:</span> Sorted by{' '}
                   {sortBy === 'score' ? 'match score' : 'candidate name'}
                   {skillFilter ? ` - Filtered on "${skillFilter}"` : ' - No skill filter applied'}
                 </p>
               </div>
             </div>
-            <div className="space-y-4 rounded-4xl border border-slate-200 bg-white p-6 shadow-card-soft">
-              <h3 className="text-lg font-semibold text-slate-900">Core skill blueprint</h3>
-              <ul className="space-y-3 text-sm text-slate-600">
+            <div className="space-y-4 rounded-4xl border border-[#12233E] bg-[#0A1628] p-6 shadow-card-soft">
+              <h3 className="text-lg font-semibold text-[#DCE8FA]">Core skill blueprint</h3>
+              <ul className="space-y-3 text-sm text-[#7F93AE]">
                 {requiredSkills.map((skill) => (
                   <li
                     key={skill}
-                    className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2"
+                    className="flex items-center gap-3 rounded-2xl border border-[#12233E] bg-[#0A1628] px-4 py-2"
                   >
-                    <Star className="h-4 w-4 text-primary-500" />
+                    <Star className="h-4 w-4 text-[#38BDF8]" />
                     {skill}
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="space-y-4 rounded-4xl border border-slate-200 bg-white p-6 shadow-card-soft">
-              <h3 className="text-lg font-semibold text-slate-900">Next steps</h3>
-              <p className="text-sm text-slate-600">
+            <div className="space-y-4 rounded-4xl border border-[#12233E] bg-[#0A1628] p-6 shadow-card-soft">
+              <h3 className="text-lg font-semibold text-[#DCE8FA]">Next steps</h3>
+              <p className="text-sm text-[#7F93AE]">
                 Share the shortlist with hiring managers or rerun the job with refined weighting to surface alternative
                 profiles.
               </p>
               <div className="flex flex-col gap-3 text-xs font-semibold uppercase tracking-wide">
-                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-primary-700 transition hover:bg-primary-100">
-                  <Sparkles className="h-4 w-4 text-primary-600" />
+                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-[#38BDF8]/40 bg-[#38BDF8]/15 px-4 py-2 text-[#38BDF8] transition hover:bg-[#38BDF8]/20">
+                  <Sparkles className="h-4 w-4 text-[#38BDF8]" />
                   Rerun with new weights
                 </button>
-                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-slate-700 transition hover:bg-primary-50 hover:text-primary-700">
-                  <FileBarChart className="h-4 w-4 text-primary-600" />
+                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-[#12233E] bg-[#0A1628] px-4 py-2 text-[#DCE8FA] transition hover:bg-[#38BDF8]/15 hover:text-[#38BDF8]">
+                  <FileBarChart className="h-4 w-4 text-[#38BDF8]" />
                   Share analytics
                 </button>
               </div>
             </div>
           </aside>
         </section>
-      </div>
-    </Layout>
+    </div>
   );
 }
