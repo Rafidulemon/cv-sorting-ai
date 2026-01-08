@@ -1,0 +1,398 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import {
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
+  Briefcase,
+  CalendarClock,
+  ChevronRight,
+  Filter,
+  LineChart,
+  Sparkles,
+  Users2,
+} from 'lucide-react';
+import { Pagination } from '@/app/components/Pagination';
+import type { JobSummary, SortingState } from './data';
+import { jobs as jobSummaries } from './data';
+
+const jobVelocity = [
+  { label: 'Mon', value: 6 },
+  { label: 'Tue', value: 9 },
+  { label: 'Wed', value: 5 },
+  { label: 'Thu', value: 11 },
+  { label: 'Fri', value: 7 },
+];
+
+const stageDistribution = [
+  { label: 'Screening', count: 24 },
+  { label: 'Interview', count: 14 },
+  { label: 'Offer', count: 6 },
+  { label: 'Hired', count: 3 },
+];
+
+const statusStyles: Record<string, string> = {
+  Active: 'bg-[#E8F2FF] text-[#1C64F2]',
+  Draft: 'bg-[#FFF5E5] text-[#A26B00]',
+  Reviewing: 'bg-[#E9E5FF] text-[#5B32D2]',
+  Completed: 'bg-[#E6F4EA] text-[#1B806A]',
+};
+
+const sortingStyles: Record<SortingState, { label: string; className: string }> = {
+  not_started: { label: 'Needs sorting', className: 'bg-[#FFF5E5] text-[#9A5B00]' },
+  processing: { label: 'Processing', className: 'bg-[#FEF3C7] text-[#92400E]' },
+  completed: { label: 'Sorted', className: 'bg-[#E6F4EA] text-[#1B806A]' },
+};
+
+const maxVelocity = Math.max(...jobVelocity.map((item) => item.value));
+const linePoints = jobVelocity
+  .map((item, index) => {
+    const x = (index / (jobVelocity.length - 1)) * 100;
+    const y = 100 - (item.value / maxVelocity) * 100;
+    return `${x},${y}`;
+  })
+  .join(' ');
+
+const sortingFilterOptions: Array<{ value: 'all' | SortingState; label: string }> = [
+  { value: 'all', label: 'All sorting states' },
+  { value: 'not_started', label: 'Needs sorting' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'completed', label: 'Sorted' },
+];
+
+const statusFilterOptions: Array<{ value: 'all' | JobSummary['status']; label: string }> = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Reviewing', label: 'Reviewing' },
+  { value: 'Draft', label: 'Draft' },
+  { value: 'Completed', label: 'Completed' },
+];
+
+export default function JobsPage() {
+  const [sortingFilter, setSortingFilter] = useState<'all' | SortingState>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | JobSummary['status']>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [jobsPage, setJobsPage] = useState(1);
+  const jobsPageSize = 5;
+
+  const filteredJobs = useMemo(() => {
+    const matchesFilters = (job: JobSummary) => {
+      const matchesSorting =
+        sortingFilter === 'all'
+          ? true
+          : sortingFilter === 'processing'
+            ? job.sortingState === 'processing'
+            : sortingFilter === 'completed'
+              ? job.sortingState === 'completed'
+              : job.sortingState === 'not_started';
+
+      const matchesStatus = statusFilter === 'all' ? true : job.status === statusFilter;
+      const matchesSearch =
+        searchTerm.trim().length === 0
+          ? true
+          : `${job.title} ${job.owner}`.toLowerCase().includes(searchTerm.toLowerCase());
+
+      return matchesSorting && matchesStatus && matchesSearch;
+    };
+
+    return jobSummaries.filter(matchesFilters);
+  }, [searchTerm, sortingFilter, statusFilter]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredJobs.length / jobsPageSize));
+    if (jobsPage > maxPage) {
+      setJobsPage(maxPage);
+    }
+  }, [filteredJobs.length, jobsPage, jobsPageSize]);
+
+  const paginatedJobs = useMemo(() => {
+    const start = (jobsPage - 1) * jobsPageSize;
+    return filteredJobs.slice(start, start + jobsPageSize);
+  }, [filteredJobs, jobsPage, jobsPageSize]);
+
+  return (
+    <div className="space-y-10 text-[#181B31]">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#E5E7EB] bg-white px-6 py-5 shadow-card-soft">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">Pipeline</p>
+          <h1 className="mt-1 text-2xl font-semibold">Jobs</h1>
+          <p className="text-sm text-[#4B5563]">
+            Track every opening, monitor performance, and jump back into your drafts.
+          </p>
+        </div>
+        <Link
+          href="/jobs/new"
+          className="inline-flex items-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
+        >
+          <Sparkles className="h-4 w-4" />
+          Create new job
+        </Link>
+      </header>
+
+      <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+        <div className="rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-card-soft">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <LineChart className="h-5 w-5 text-[#3D64FF]" />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">New jobs this week</p>
+                <h2 className="text-lg font-semibold text-[#181B31]">Velocity</h2>
+              </div>
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#3D64FF]">Live</span>
+          </div>
+          <div className="mt-5 rounded-2xl bg-gradient-to-br from-[#F5F7FB] to-white p-5">
+            <svg viewBox="0 0 100 100" className="h-48 w-full">
+              <defs>
+                <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#3D64FF" stopOpacity="0.5" />
+                  <stop offset="100%" stopColor="#3D64FF" stopOpacity="0.05" />
+                </linearGradient>
+              </defs>
+              <polyline
+                fill="url(#lineGradient)"
+                stroke="none"
+                points={`0,100 ${linePoints} 100,100`}
+              />
+              <polyline
+                fill="none"
+                stroke="#3D64FF"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={linePoints}
+              />
+              {jobVelocity.map((item, index) => {
+                const x = (index / (jobVelocity.length - 1)) * 100;
+                const y = 100 - (item.value / maxVelocity) * 100;
+                return <circle key={item.label} cx={x} cy={y} r="2.2" fill="#3D64FF" />;
+              })}
+              {jobVelocity.map((item, index) => {
+                const x = (index / (jobVelocity.length - 1)) * 100;
+                const y = 100 - (item.value / maxVelocity) * 100;
+                return (
+                  <text
+                    key={`${item.label}-label`}
+                    x={x}
+                    y={y - 5}
+                    textAnchor="middle"
+                    fontSize="7"
+                    fill="#4B5563"
+                  >
+                    {item.value}
+                  </text>
+                );
+              })}
+              {jobVelocity.map((item, index) => {
+                const x = (index / (jobVelocity.length - 1)) * 100;
+                return (
+                  <text
+                    key={`${item.label}-axis`}
+                    x={x}
+                    y={98}
+                    textAnchor="middle"
+                    fontSize="7"
+                    fill="#9CA3AF"
+                  >
+                    {item.label}
+                  </text>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-card-soft">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BarChart3 className="h-5 w-5 text-[#3D64FF]" />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">Stage load</p>
+                <h2 className="text-lg font-semibold text-[#181B31]">Active workload</h2>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-[#8A94A6]" />
+          </div>
+          <div className="mt-5 space-y-4">
+            {stageDistribution.map((stage) => {
+              const maxCount = Math.max(...stageDistribution.map((item) => item.count));
+              const width = `${Math.max(12, (stage.count / maxCount) * 100)}%`;
+              return (
+                <div key={stage.label} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm text-[#4B5563]">
+                    <span className="font-medium text-[#181B31]">{stage.label}</span>
+                    <span className="rounded-full bg-[#F5F7FB] px-3 py-1 text-xs font-semibold text-[#3D64FF]">
+                      {stage.count}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-[#EEF2F7]">
+                    <div className="h-2 rounded-full bg-gradient-to-r from-[#3D64FF] to-[#7C8CFF]" style={{ width }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-card-soft">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Briefcase className="h-5 w-5 text-[#3D64FF]" />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">Job list</p>
+              <h2 className="text-lg font-semibold text-[#181B31]">All openings</h2>
+            </div>
+          </div>
+          <Link
+            href="/jobs/new"
+            className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F5F7FB]"
+          >
+            Start new
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-[1.1fr_1.1fr_0.95fr]">
+          <div className="rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/70 p-4">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">
+              <Filter className="h-3.5 w-3.5" />
+              Sorting
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {sortingFilterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setSortingFilter(option.value)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    sortingFilter === option.value
+                      ? 'border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary'
+                      : 'border-[#E5E7EB] text-[#4B5563] hover:border-[#3D64FF]/40 hover:text-[#3D64FF]'
+                  }`}
+                >
+                  {option.value === 'not_started' && <AlertTriangle className="h-3.5 w-3.5" />}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/70 p-4">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">
+              <Filter className="h-3.5 w-3.5" />
+              Status
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {statusFilterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setStatusFilter(option.value)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    statusFilter === option.value
+                      ? 'border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF]'
+                      : 'border-[#E5E7EB] text-[#4B5563] hover:border-[#3D64FF]/40 hover:text-[#3D64FF]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/70 p-4">
+            <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">
+              <span>Search</span>
+              <span className="text-[11px] text-[#9CA3AF]">Role or owner</span>
+            </div>
+            <div className="mt-3 flex items-center gap-2 rounded-2xl border border-[#E5E7EB] bg-white px-3">
+              <Filter className="h-4 w-4 text-[#3D64FF]" />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="e.g. Backend, Nora"
+                className="w-full bg-transparent py-2.5 text-sm text-[#181B31] placeholder:text-[#9CA3AF] focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 divide-y divide-[#F0F2F5] rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/60">
+          <div className="grid grid-cols-[1.6fr_0.9fr_1fr_1fr_0.95fr] items-center px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#8A94A6]">
+            <span>Role</span>
+            <span>Status</span>
+            <span>Sorting</span>
+            <span>Owner</span>
+            <span>Activity</span>
+          </div>
+          {paginatedJobs.map((job) => (
+            <Link
+              key={job.id}
+              href={`/jobs/${job.id}`}
+              className="grid grid-cols-[1.6fr_0.9fr_1fr_1fr_0.95fr] items-center gap-3 px-4 py-4 text-sm text-[#1F2A44] transition hover:bg-white"
+            >
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold">{job.title}</p>
+                  {job.sortingState === 'not_started' && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF1F2] px-2 py-1 text-[11px] font-semibold text-[#9A1035]">
+                      <AlertTriangle className="h-3 w-3" />
+                      Needs sorting
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  <span>Created {job.created}</span>
+                </div>
+              </div>
+              <span
+                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[job.status] ?? 'bg-[#EEF2F7] text-[#1F2A44]'}`}
+              >
+                <span className="h-2 w-2 rounded-full bg-current" />
+                {job.status}
+              </span>
+              <span
+                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${sortingStyles[job.sortingState].className}`}
+              >
+                <span className="h-2 w-2 rounded-full bg-current" />
+                {sortingStyles[job.sortingState].label}
+              </span>
+              <span className="text-sm font-medium text-[#1F2A44]">{job.owner}</span>
+              <div className="flex items-center justify-between gap-2 text-xs text-[#6B7280]">
+                <span className="flex flex-col gap-1">
+                  <span>
+                    Updated {job.updated}
+                    {job.lastSorted ? ` • Last sort ${job.lastSorted}` : ''}
+                  </span>
+                  <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[#EAF7ED] px-3 py-1 font-semibold text-[#1B806A]">
+                    <Users2 className="h-3.5 w-3.5" />
+                    Shortlist {job.shortlist}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 text-[#C0C4CC]" />
+              </div>
+            </Link>
+          ))}
+          {filteredJobs.length === 0 && (
+            <div className="px-4 py-6 text-sm text-[#6B7280]">
+              No jobs match the selected filters. Try clearing the search or sorting state.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <Pagination
+            page={jobsPage}
+            totalItems={filteredJobs.length}
+            pageSize={jobsPageSize}
+            onPageChange={setJobsPage}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

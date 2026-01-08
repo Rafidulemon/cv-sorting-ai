@@ -1,11 +1,11 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Facebook, Linkedin, Twitter, Youtube } from "lucide-react";
 
 const footerLinks = [
-  { label: "Product", href: "/dashboard" },
-  { label: "Features", href: "/dashboard" },
-  { label: "Pricing", href: "/pricing" },
-  { label: "Integrations", href: "/dashboard" },
+  { label: "Privacy Policy", href: "/privacy" },
+  { label: "Cookie Policy", href: "/cookies" },
+  { label: "Terms and Conditions", href: "/terms" },
 ];
 
 const socialLinks = [
@@ -31,10 +31,17 @@ export default function DashboardFooter() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-[#8a90a6]">
-          <span>Trusted by talent teams at</span>
-          <span className="rounded-full bg-[#f7ecff] px-3 py-1 text-[11px] font-semibold text-primary-600">Grayscale</span>
-          <span className="rounded-full bg-[#e9f3ff] px-3 py-1 text-[11px] font-semibold text-[#3D64FF]">LightAI</span>
+        <div className="flex flex-row justify-center items-center gap-2 text-sm font-semibold text-[#6f7890] md:flex-1 md:text-center">
+          <span className="text-[#646c80]">Design and Developed by</span>
+          <Link href="https://carriasticapp.vercel.app/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2">
+            <Image
+              src="/logo/carriastic_logo.png"
+              alt="Carriastic"
+              width={150}
+              height={32}
+              className="h-8 w-auto"
+            />
+          </Link>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -50,8 +57,6 @@ export default function DashboardFooter() {
           ))}
         </div>
       </div>
-
-      <div className="mt-3 text-xs text-[#9aa0b5]">(c) 2026 Carriastic. All rights reserved.</div>
     </footer>
   );
 }

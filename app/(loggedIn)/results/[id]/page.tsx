@@ -1,85 +1,23 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
   ArrowLeft,
   ArrowUpDown,
   Download,
+  Eye,
   Filter,
   FileBarChart,
   FileText,
   ScrollText,
   Sparkles,
   Star,
+  Trash2,
 } from 'lucide-react';
-import type { Candidate } from '../../../types';
-
-const candidates: Candidate[] = [
-  {
-    id: 'cand-001',
-    name: 'Avery Johnson',
-    matchScore: 92,
-    matchedSkills: ['Python', 'Django', 'AWS', 'PostgreSQL'],
-    experience: '6 years | TechNova Labs',
-    summary:
-      'Senior backend engineer delivering scalable APIs and distributed systems with a focus on reliability.',
-    skillGap: {
-      required: ['Python', 'Django', 'AWS', 'REST APIs', 'Team Leadership'],
-      present: ['Python', 'Django', 'AWS', 'REST APIs'],
-    },
-    cvText:
-      'Lead backend development for AI-driven analytics platform, architected microservices with Python and Django. Managed cloud infrastructure on AWS (ECS, Lambda, RDS)...',
-  },
-  {
-    id: 'cand-002',
-    name: 'Jordan Patel',
-    matchScore: 88,
-    matchedSkills: ['Python', 'FastAPI', 'Kafka', 'CI/CD'],
-    experience: '5 years | Orbit Systems',
-    summary:
-      'Built low-latency data pipelines and modernized CI/CD workflows. Experience mentoring junior engineers.',
-    skillGap: {
-      required: ['Python', 'Django', 'AWS', 'REST APIs', 'Team Leadership'],
-      present: ['Python', 'FastAPI', 'CI/CD', 'REST APIs'],
-    },
-    cvText:
-      'Engineering lead for event-driven services with FastAPI and Kafka. Implemented automation suite with GitHub Actions, Terraform on AWS...',
-  },
-  {
-    id: 'cand-003',
-    name: 'Emilia Chen',
-    matchScore: 83,
-    matchedSkills: ['Python', 'Django', 'GraphQL', 'People Management'],
-    experience: '7 years | Northwind Tech',
-    summary:
-      'Managed a team of 5 engineers building subscription commerce tooling. Strong focus on cross-team collaboration.',
-    skillGap: {
-      required: ['Python', 'Django', 'AWS', 'REST APIs', 'Team Leadership'],
-      present: ['Python', 'Django', 'Team Leadership', 'GraphQL'],
-    },
-    cvText:
-      'Directed roadmap delivery for subscription billing platform. Introduced OKR process and improved on-call reliability metrics...',
-  },
-  {
-    id: 'cand-004',
-    name: 'Noah Murphy',
-    matchScore: 76,
-    matchedSkills: ['Python', 'Serverless', 'AWS', 'Monitoring'],
-    experience: '4 years | Skyward Analytics',
-    summary:
-      'Full-stack engineer specialising in serverless architectures and observability tooling.',
-    skillGap: {
-      required: ['Python', 'Django', 'AWS', 'REST APIs', 'Team Leadership'],
-      present: ['Python', 'AWS', 'Serverless', 'Monitoring'],
-    },
-    cvText:
-      'Designed telemetry pipelines with AWS Lambda and Kinesis. Delivered customer dashboards in React with robust alerting integrations...',
-  },
-];
-
-const requiredSkills = ['Python', 'Django', 'AWS', 'REST APIs', 'Team Leadership'];
+import { Pagination } from '@/app/components/Pagination';
+import { candidateResults, requiredSkills, stageMeta, type CandidateResult } from '../data';
 
 export default function ResultsPage() {
   const params = useParams<{ id: string | string[] }>();
@@ -87,35 +25,155 @@ export default function ResultsPage() {
   const jobId = Array.isArray(jobIdRaw) ? jobIdRaw[0] : jobIdRaw;
   const [sortBy, setSortBy] = useState<'score' | 'name'>('score');
   const [skillFilter, setSkillFilter] = useState('');
-  const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(candidates[0].id);
+  const [candidateRows, setCandidateRows] = useState<CandidateResult[]>(candidateResults);
+  const [shortlistPage, setShortlistPage] = useState(1);
+  const [holdPage, setHoldPage] = useState(1);
+  const [rejectedPage, setRejectedPage] = useState(1);
+  const pageSize = 4;
 
-  const filteredCandidates = useMemo(() => {
+  const shortlist = useMemo(() => {
     const filtered = skillFilter
-      ? candidates.filter((candidate) =>
-          candidate.matchedSkills.some((skill) => skill.toLowerCase().includes(skillFilter.toLowerCase())),
+      ? candidateRows.filter(
+          (candidate) =>
+            candidate.stage === 'shortlist' &&
+            candidate.matchedSkills.some((skill) => skill.toLowerCase().includes(skillFilter.toLowerCase())),
         )
-      : candidates;
+      : candidateRows.filter((candidate) => candidate.stage === 'shortlist');
 
     return [...filtered].sort((a, b) =>
       sortBy === 'score' ? b.matchScore - a.matchScore : a.name.localeCompare(b.name),
     );
-  }, [skillFilter, sortBy]);
+  }, [candidateRows, skillFilter, sortBy]);
 
-  const shortlisted = filteredCandidates.slice(0, 10);
-  const topCandidate = shortlisted[0];
-  const metrics = [
-    { label: 'CVs processed', value: '47', helper: '12 shortlisted this run' },
-    { label: 'Avg. match score', value: '82%', helper: '+4% vs previous cycle' },
-    { label: 'Time saved', value: '6.2h', helper: 'Compared to manual review' },
-  ];
+  const hold = useMemo(
+    () => candidateRows.filter((candidate) => candidate.stage === 'hold'),
+    [candidateRows],
+  );
+
+  const rejected = useMemo(
+    () => candidateRows.filter((candidate) => candidate.stage === 'rejected'),
+    [candidateRows],
+  );
+
+  useEffect(() => {
+    const maxShortlistPage = Math.max(1, Math.ceil(shortlist.length / pageSize));
+    const maxHoldPage = Math.max(1, Math.ceil(hold.length / pageSize));
+    const maxRejectedPage = Math.max(1, Math.ceil(rejected.length / pageSize));
+    if (shortlistPage > maxShortlistPage) setShortlistPage(maxShortlistPage);
+    if (holdPage > maxHoldPage) setHoldPage(maxHoldPage);
+    if (rejectedPage > maxRejectedPage) setRejectedPage(maxRejectedPage);
+  }, [hold.length, pageSize, rejected.length, shortlist.length, holdPage, shortlistPage, rejectedPage]);
+
+  const paginate = (list: CandidateResult[], page: number) => {
+    const start = (page - 1) * pageSize;
+    return list.slice(start, start + pageSize);
+  };
+
+  const paginatedShortlist = useMemo(() => paginate(shortlist, shortlistPage), [shortlist, shortlistPage]);
+  const paginatedHold = useMemo(() => paginate(hold, holdPage), [hold, holdPage]);
+  const paginatedRejected = useMemo(() => paginate(rejected, rejectedPage), [rejected, rejectedPage]);
+
+  const topCandidate = shortlist[0];
   const averageCoverage =
-    shortlisted.length === 0
+    shortlist.length === 0
       ? null
       : Math.round(
-          (shortlisted.reduce((acc, candidate) => acc + candidate.skillGap.present.length, 0) /
-            (shortlisted.length * requiredSkills.length)) *
+          (shortlist.reduce((acc, candidate) => acc + candidate.skillGap.present.length, 0) /
+            (shortlist.length * requiredSkills.length)) *
             100,
         );
+
+  const averageScore =
+    shortlist.length === 0
+      ? null
+      : Math.round(shortlist.reduce((acc, candidate) => acc + candidate.matchScore, 0) / shortlist.length);
+
+  const metrics = [
+    { label: 'CVs processed', value: candidateRows.length.toString(), helper: `${shortlist.length} shortlisted` },
+    {
+      label: 'Avg. match score',
+      value: averageScore !== null ? `${averageScore}%` : '--',
+      helper: shortlist.length ? 'Based on shortlisted pool' : 'Add CVs to calculate',
+    },
+    { label: 'Time saved', value: '6.2h', helper: 'Compared to manual review' },
+  ];
+
+  const removeCandidate = (candidateId: string) => {
+    setCandidateRows((prev) => prev.filter((candidate) => candidate.id !== candidateId));
+  };
+
+  const renderTable = (
+    title: string,
+    helper: string,
+    rows: CandidateResult[],
+    total: number,
+    page: number,
+    onPageChange: (next: number) => void,
+  ) => (
+    <div className="space-y-3 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-5 shadow-card-soft">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">{title}</p>
+          <p className="text-sm text-[#4B5563]">{helper}</p>
+        </div>
+        <span className="rounded-full bg-[#F5F7FB] px-3 py-1 text-xs font-semibold text-[#3D64FF]">
+          {total} {total === 1 ? 'profile' : 'profiles'}
+        </span>
+      </div>
+
+      <div className="divide-y divide-[#EEF2F7] rounded-2xl border border-[#EEF2F7]">
+        <div className="grid grid-cols-[1.5fr_0.7fr_0.9fr_0.9fr] items-center gap-3 bg-[#F9FAFB] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#8A94A6]">
+          <span>Candidate</span>
+          <span>Score</span>
+          <span>Stage</span>
+          <span className="text-right">Actions</span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-[#6B7280]">No profiles in this stage yet.</div>
+        ) : (
+          rows.map((candidate) => (
+            <div
+              key={candidate.id}
+              className="grid grid-cols-[1.5fr_0.7fr_0.9fr_0.9fr] items-center gap-3 px-4 py-4 text-sm text-[#1F2A44]"
+            >
+              <div className="space-y-1">
+                <p className="font-semibold">{candidate.name}</p>
+                <p className="text-xs text-[#6B7280]">{candidate.experience}</p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full border border-success-500/30 bg-success-500/10 px-3 py-1 text-sm font-semibold text-success-700">
+                {candidate.matchScore}%
+              </span>
+              <span
+                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${stageMeta[candidate.stage].className}`}
+              >
+                <span className="h-2 w-2 rounded-full bg-current" />
+                {stageMeta[candidate.stage].label}
+              </span>
+              <div className="flex items-center justify-end gap-2">
+                <Link
+                  href={`/results/${jobId ?? 'job'}/candidates/${candidate.id}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] bg-[#FFFFFF] px-3 py-1 text-xs font-semibold text-[#1F2A44] transition hover:border-[#3D64FF]/40 hover:text-[#3D64FF]"
+                >
+                  <Eye className="h-4 w-4" />
+                  View
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => removeCandidate(candidate.id)}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#FEE2E2] bg-[#FFF5F5] px-3 py-1 text-xs font-semibold text-[#B91C1C] transition hover:border-[#FCA5A5] hover:bg-[#FEE2E2]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <Pagination page={page} totalItems={total} pageSize={pageSize} onPageChange={onPageChange} />
+    </div>
+  );
 
   return (
     <div className="space-y-12 text-[#181B31]">
@@ -184,152 +242,51 @@ export default function ResultsPage() {
           ))}
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-5 shadow-card-soft">
-              <div className="flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] p-1">
-                <button
-                  type="button"
-                  onClick={() => setSortBy('score')}
-                  className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
-                    sortBy === 'score'
-                      ? 'bg-[#3D64FF]/20 text-[#3D64FF]'
-                      : 'text-[#4B5563] hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]'
-                  }`}
-                >
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                  Score
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSortBy('name')}
-                  className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
-                    sortBy === 'name'
-                      ? 'bg-[#3D64FF]/20 text-[#3D64FF]'
-                      : 'text-[#4B5563] hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]'
-                  }`}
-                >
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                  Name
-                </button>
-              </div>
-              <div className="flex min-w-[220px] flex-1 items-center gap-3 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-sm text-[#4B5563] shadow-inner">
-                <Filter className="h-4 w-4 text-[#3D64FF]" />
-                <input
-                  type="text"
-                  value={skillFilter}
-                  onChange={(event) => setSkillFilter(event.target.value)}
-                  placeholder="Filter skills"
-                  className="flex-1 bg-transparent text-sm text-[#181B31] placeholder:text-[#8A94A6] focus:outline-none"
-                />
-              </div>
-              <button className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]">
-                <ScrollText className="h-4 w-4 text-[#3D64FF]" />
-                View audit log
+        <section className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-5 shadow-card-soft">
+            <div className="flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] p-1">
+              <button
+                type="button"
+                onClick={() => setSortBy('score')}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
+                  sortBy === 'score'
+                    ? 'bg-[#3D64FF]/20 text-[#3D64FF]'
+                    : 'text-[#4B5563] hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]'
+                }`}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                Score
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortBy('name')}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
+                  sortBy === 'name'
+                    ? 'bg-[#3D64FF]/20 text-[#3D64FF]'
+                    : 'text-[#4B5563] hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]'
+                }`}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                Name
               </button>
             </div>
-
-            <ul className="space-y-4">
-              {shortlisted.map((candidate) => {
-                const isExpanded = expandedCandidateId === candidate.id;
-                const missingSkills = candidate.skillGap.required.filter(
-                  (skill) => !candidate.skillGap.present.includes(skill),
-                );
-                const rankingIndex = shortlisted.findIndex((item) => item.id === candidate.id) + 1;
-
-                return (
-                  <li
-                    key={candidate.id}
-                    className="overflow-hidden rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] shadow-card-soft"
-                  >
-                    <button
-                      type="button"
-                      className="w-full space-y-4 px-6 py-5 text-left transition hover:bg-[#3D64FF]/15"
-                      onClick={() => setExpandedCandidateId(isExpanded ? null : candidate.id)}
-                    >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                          <p className="text-lg font-semibold text-[#181B31]">{candidate.name}</p>
-                          <p className="text-xs font-medium uppercase tracking-[0.22em] text-[#8A94A6]">
-                            {candidate.experience}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="inline-flex items-center gap-2 rounded-full border border-success-500/30 bg-success-500/10 px-3 py-1 text-sm font-semibold text-success-700">
-                            <Star className="h-4 w-4 text-success-400" />
-                            {candidate.matchScore}%
-                          </span>
-                          <span className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-1 text-xs text-[#4B5563]">
-                            Ranked {rankingIndex}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs text-[#4B5563]">
-                        {candidate.matchedSkills.map((skill) => (
-                          <span
-                            key={skill}
-                            className="rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-3 py-1 font-medium text-[#3D64FF]"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="space-y-5 border-t border-[#DCE0E0] bg-[#FFFFFF] px-6 py-5 text-sm text-[#181B31]">
-                        <p>{candidate.summary}</p>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Strengths</p>
-                            <ul className="mt-3 space-y-2 text-sm">
-                              {candidate.skillGap.present.map((skill) => (
-                                <li key={skill} className="flex items-center gap-2 text-[#3D64FF]">
-                                  <Sparkles className="h-4 w-4 text-[#3D64FF]" />
-                                  {skill}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
-                              Opportunity areas
-                            </p>
-                            <ul className="mt-3 space-y-2 text-sm">
-                              {missingSkills.length > 0 ? (
-                                missingSkills.map((skill) => (
-                                  <li key={skill} className="flex items-center gap-2 text-[#3D64FF]">
-                                    <Filter className="h-4 w-4 text-[#3D64FF]" />
-                                    {skill}
-                                  </li>
-                                ))
-                              ) : (
-                                <li className="text-[#8A94A6]">No gaps detected for required skills.</li>
-                              )}
-                            </ul>
-                          </div>
-                        </div>
-
-                        <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-4 text-sm text-[#181B31]">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
-                            CV highlights
-                          </p>
-                          <p className="mt-2 leading-relaxed text-[#4B5563]">{candidate.cvText}</p>
-                          <button className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]">
-                            <ScrollText className="h-4 w-4 text-[#3D64FF]" />
-                            Open full CV
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="flex min-w-[220px] flex-1 items-center gap-3 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-sm text-[#4B5563] shadow-inner">
+              <Filter className="h-4 w-4 text-[#3D64FF]" />
+              <input
+                type="text"
+                value={skillFilter}
+                onChange={(event) => setSkillFilter(event.target.value)}
+                placeholder="Filter shortlist by skill"
+                className="flex-1 bg-transparent text-sm text-[#181B31] placeholder:text-[#8A94A6] focus:outline-none"
+              />
+            </div>
+            <button className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]">
+              <ScrollText className="h-4 w-4 text-[#3D64FF]" />
+              View audit log
+            </button>
           </div>
 
-          <aside className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-3">
             <div className="space-y-5 rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft">
               <h3 className="text-lg font-semibold text-[#181B31]">Processing summary</h3>
               <div className="space-y-3 text-sm text-[#4B5563]">
@@ -345,6 +302,10 @@ export default function ResultsPage() {
                   <span className="font-semibold text-[#181B31]">Filtering:</span> Sorted by{' '}
                   {sortBy === 'score' ? 'match score' : 'candidate name'}
                   {skillFilter ? ` - Filtered on "${skillFilter}"` : ' - No skill filter applied'}
+                </p>
+                <p>
+                  <span className="font-semibold text-[#181B31]">Stage mix:</span>{' '}
+                  {shortlist.length} shortlisted • {hold.length} on hold • {rejected.length} rejected
                 </p>
               </div>
             </div>
@@ -362,24 +323,49 @@ export default function ResultsPage() {
                 ))}
               </ul>
             </div>
-            <div className="space-y-4 rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft">
-              <h3 className="text-lg font-semibold text-[#181B31]">Next steps</h3>
-              <p className="text-sm text-[#4B5563]">
-                Share the shortlist with hiring managers or rerun the job with refined weighting to surface alternative
-                profiles.
-              </p>
-              <div className="flex flex-col gap-3 text-xs font-semibold uppercase tracking-wide">
-                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-[#3D64FF] transition hover:bg-[#3D64FF]/20">
-                  <Sparkles className="h-4 w-4 text-[#3D64FF]" />
-                  Rerun with new weights
-                </button>
-                <button className="inline-flex items-center justify-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-[#181B31] transition hover:bg-[#3D64FF]/15 hover:text-[#3D64FF]">
-                  <FileBarChart className="h-4 w-4 text-[#3D64FF]" />
-                  Share analytics
-                </button>
-              </div>
+            <div className="space-y-4 rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 text-sm text-[#4B5563] shadow-card-soft">
+              <h3 className="text-lg font-semibold text-[#181B31]">Downloads</h3>
+              <button className="flex w-full items-center justify-between rounded-2xl border border-[#DCE0E0] bg-[#F9FAFB] px-4 py-3 transition hover:border-[#3D64FF]/40 hover:bg-[#3D64FF]/10">
+                <span className="inline-flex items-center gap-2 font-semibold text-[#181B31]">
+                  <Download className="h-4 w-4 text-[#3D64FF]" />
+                  Export shortlisted
+                </span>
+                <ArrowLeft className="h-4 w-4 rotate-180 text-[#3D64FF]" />
+              </button>
+              <button className="flex w-full items-center justify-between rounded-2xl border border-[#DCE0E0] bg-[#F9FAFB] px-4 py-3 transition hover:border-[#3D64FF]/40 hover:bg-[#3D64FF]/10">
+                <span className="inline-flex items-center gap-2 font-semibold text-[#181B31]">
+                  <FileText className="h-4 w-4 text-[#3D64FF]" />
+                  Download audit trail
+                </span>
+                <ArrowLeft className="h-4 w-4 rotate-180 text-[#3D64FF]" />
+              </button>
             </div>
-          </aside>
+          </div>
+
+          {renderTable(
+            'Shortlisted CVs',
+            'Top picks ready for hiring manager review.',
+            paginatedShortlist,
+            shortlist.length,
+            shortlistPage,
+            setShortlistPage,
+          )}
+          {renderTable(
+            'Hold CVs',
+            'Parked profiles to revisit after the first pass.',
+            paginatedHold,
+            hold.length,
+            holdPage,
+            setHoldPage,
+          )}
+          {renderTable(
+            'Rejected CVs',
+            'Profiles that are not a fit for this role right now.',
+            paginatedRejected,
+            rejected.length,
+            rejectedPage,
+            setRejectedPage,
+          )}
         </section>
     </div>
   );

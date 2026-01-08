@@ -7,6 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Briefcase,
+  CreditCard,
   LayoutDashboard,
   LogOut,
   Puzzle,
@@ -31,7 +32,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Jobs", href: "/job/new", icon: Briefcase },
+  { label: "Jobs", href: "/jobs", icon: Briefcase },
+  { label: "Credits", href: "/credits", icon: CreditCard },
   { label: "Candidates", href: "/cv/analyze", icon: Users2 },
   { label: "Reports", href: "/history", icon: BarChart3 },
   { label: "Team", href: "/account", icon: UserRound },
@@ -91,7 +93,7 @@ export default function LeftMenu({
         </div>
 
         <Link
-          href="/job/new"
+          href="/jobs/new"
           className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-2 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]"
           onClick={onCloseNav}
         >

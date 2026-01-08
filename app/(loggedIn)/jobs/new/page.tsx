@@ -3,12 +3,15 @@
 import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { z } from 'zod';
 import {
   ArrowLeft,
   CheckCircle2,
+  Download,
   FileSearch,
   FileText,
   FileUp,
+  Linkedin,
   LinkIcon,
   Loader2,
   Rocket,
@@ -63,7 +66,20 @@ const aiFields: Array<{
   },
 ];
 
-const experienceOptions = ['Entry level', 'Mid-level', 'Senior', 'Lead', 'Director'];
+const experienceOptions = ['Entry level', 'Mid-level', 'Senior', 'Lead', 'Director'] as const;
+
+const aiFieldSchemas: Record<AiFieldKey, z.ZodTypeAny> = {
+  title: z.string().trim().min(3, 'Job title is required'),
+  responsibilities: z.string().trim().optional().or(z.literal('')),
+  skills: z.string().trim().min(3, 'Required skills are required'),
+  experienceLevel: z.enum(experienceOptions, {
+    errorMap: () => ({ message: 'Experience level is required' }),
+  }),
+  companyCulture: z.string().trim().optional().or(z.literal('')),
+};
+
+const requiredFieldKeys: AiFieldKey[] = ['title', 'skills', 'experienceLevel'];
+const skippableKeys: AiFieldKey[] = ['responsibilities', 'companyCulture'];
 
 export default function NewJobPage() {
   const [currentSection, setCurrentSection] = useState<'description' | 'upload'>('description');
@@ -88,21 +104,67 @@ export default function NewJobPage() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [processingState, setProcessingState] = useState<'idle' | 'processing' | 'complete'>('idle');
   const [progress, setProgress] = useState(0);
+  const [errors, setErrors] = useState<Record<AiFieldKey, string>>({
+    title: '',
+    responsibilities: '',
+    skills: '',
+    experienceLevel: '',
+    companyCulture: '',
+  });
+  const [hasReachedFourthStep, setHasReachedFourthStep] = useState(false);
+
+  const currentField = aiFields[aiStep];
+  const isCurrentFieldValid = useMemo(
+    () => aiFieldSchemas[currentField.key].safeParse(aiForm[currentField.key]).success,
+    [aiForm, currentField.key]
+  );
+  const canSkipCurrent = skippableKeys.includes(currentField.key);
+
+  const requiredFieldsValid = useMemo(
+    () => requiredFieldKeys.every((key) => aiFieldSchemas[key].safeParse(aiForm[key]).success),
+    [aiForm]
+  );
+
+  const canGenerateDraft = hasReachedFourthStep && requiredFieldsValid;
 
   const costUsage = useMemo(() => {
     const base = uploadedFiles.length || 47;
     return { consumed: base, total: 500 };
   }, [uploadedFiles.length]);
 
-  const currentField = aiFields[aiStep];
   const canProceedToUpload =
     currentSection === 'description' && (mode === 'ai' ? Boolean(generatedJD) : Boolean(uploadedJdFileName));
 
+  const validateField = (key: AiFieldKey, value: string) => {
+    const result = aiFieldSchemas[key].safeParse(value);
+    setErrors((prev) => ({
+      ...prev,
+      [key]: result.success ? '' : result.error.issues[0]?.message || 'Invalid value',
+    }));
+    return result.success;
+  };
+
   const handleAiChange = (value: string) => {
     setAiForm((prev) => ({ ...prev, [currentField.key]: value }));
+    validateField(currentField.key, value);
+  };
+
+  const handleNext = () => {
+    const isValid = validateField(currentField.key, aiForm[currentField.key]);
+    if (!isValid) return;
+    setAiStep((prev) => Math.min(aiFields.length - 1, prev + 1));
+  };
+
+  const handleSkip = () => {
+    if (!canSkipCurrent) return;
+    setErrors((prev) => ({ ...prev, [currentField.key]: '' }));
+    setAiStep((prev) => Math.min(aiFields.length - 1, prev + 1));
   };
 
   const handleGenerate = () => {
+    const allValid = requiredFieldKeys.every((key) => validateField(key, aiForm[key]));
+    if (!allValid || !hasReachedFourthStep) return;
+
     setIsGenerating(true);
     const formatList = (value: string) =>
       value
@@ -131,6 +193,23 @@ export default function NewJobPage() {
       setGeneratedJD(template);
       setIsGenerating(false);
     }, 700);
+  };
+
+  const handleDownloadDraft = () => {
+    if (!generatedJD) return;
+    const blob = new Blob([generatedJD], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${aiForm.title.trim() || 'job-description'}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleShareLinkedIn = () => {
+    if (!generatedJD) return;
+    const shareUrl = `https://www.linkedin.com/shareArticle?mini=true&summary=${encodeURIComponent(generatedJD)}`;
+    window.open(shareUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleUploadFiles = (event: ChangeEvent<HTMLInputElement>) => {
@@ -183,6 +262,12 @@ export default function NewJobPage() {
     setProcessingState('idle');
     setProgress(0);
   };
+
+  useEffect(() => {
+    if (aiStep >= 3) {
+      setHasReachedFourthStep(true);
+    }
+  }, [aiStep]);
 
   return (
     <>
@@ -328,10 +413,27 @@ export default function NewJobPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-3 py-1.5 text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
-                            onClick={() => setAiStep((prev) => Math.min(aiFields.length - 1, prev + 1))}
+                            className={`rounded-full px-3 py-1.5 transition ${
+                              isCurrentFieldValid
+                                ? 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'
+                                : 'border border-[#DCE0E0] bg-[#F5F7FB] text-[#8A94A6] cursor-not-allowed'
+                            }`}
+                            onClick={handleNext}
+                            disabled={!isCurrentFieldValid}
                           >
                             Next
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSkip}
+                            disabled={!canSkipCurrent}
+                            className={`rounded-full px-3 py-1.5 transition ${
+                              canSkipCurrent
+                                ? 'border border-[#FFA500]/40 bg-[#FFF2E0] text-[#9A5B00] hover:border-[#FFA500]/60 hover:bg-[#FFE4C2]'
+                                : 'border border-[#DCE0E0] bg-[#F5F7FB] text-[#8A94A6] cursor-not-allowed'
+                            }`}
+                          >
+                            Skip
                           </button>
                         </div>
                       </div>
@@ -364,6 +466,9 @@ export default function NewJobPage() {
                           className="w-full rounded-2xl border border-[#DCE0E0] bg-[#F7F8FC] p-4 text-sm text-[#181B31] placeholder:text-[#8A94A6] focus:border-[#3D64FF]/60 focus:outline-none focus:ring-2 focus:ring-[#3D64FF]/20"
                         />
                       )}
+                      {errors[currentField.key] && (
+                        <p className="text-xs font-semibold text-red-500">{errors[currentField.key]}</p>
+                      )}
 
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <p className="text-xs text-[#8A94A6]">
@@ -372,7 +477,12 @@ export default function NewJobPage() {
                         <button
                           type="button"
                           onClick={handleGenerate}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
+                          disabled={!canGenerateDraft || isGenerating}
+                          className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                            canGenerateDraft && !isGenerating
+                              ? 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'
+                              : 'cursor-not-allowed border border-[#DCE0E0] bg-[#F5F7FB] text-[#8A94A6]'
+                          }`}
                         >
                           {isGenerating ? (
                             <>
@@ -439,9 +549,39 @@ export default function NewJobPage() {
                     <div className="absolute -top-8 left-16 h-32 w-32 rounded-full bg-[#3D64FF]/15 blur-3xl" />
                   </div>
                   <div className="relative space-y-5">
-                    <div className="flex items-center gap-3">
-                      <FileSearch className="h-5 w-5 text-[#3D64FF]" />
-                      <h2 className="text-lg font-semibold text-[#181B31]">Preview draft</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <FileSearch className="h-5 w-5 text-[#3D64FF]" />
+                        <h2 className="text-lg font-semibold text-[#181B31]">Preview draft</h2>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+                        <button
+                          type="button"
+                          onClick={handleDownloadDraft}
+                          disabled={!generatedJD}
+                          className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition ${
+                            generatedJD
+                              ? 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'
+                              : 'cursor-not-allowed border border-[#DCE0E0] bg-[#F5F7FB] text-[#8A94A6]'
+                          }`}
+                        >
+                          <Download className="h-4 w-4" />
+                          Download
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleShareLinkedIn}
+                          disabled={!generatedJD}
+                          className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition ${
+                            generatedJD
+                              ? 'border border-[#0A66C2]/40 bg-[#0A66C2]/15 text-[#0A66C2] hover:border-[#0A66C2]/60 hover:bg-[#0A66C2]/25'
+                              : 'cursor-not-allowed border border-[#DCE0E0] bg-[#F5F7FB] text-[#8A94A6]'
+                          }`}
+                        >
+                          <Linkedin className="h-4 w-4" />
+                          Upload to LinkedIn
+                        </button>
+                      </div>
                     </div>
                     <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-4 text-xs leading-relaxed text-[#4B5563]">
                       {mode === 'ai' ? (
@@ -645,7 +785,16 @@ export default function NewJobPage() {
                     The AI will normalise each CV, score against your job factors, and provide reasoning for every
                     recommendation.
                   </p>
+                  <p className="text-xs text-[#8A94A6]">
+                    Not ready to sort yet? Save the job and kick off sorting from the Jobs list or job details later.
+                  </p>
                   <div className="flex flex-wrap justify-end gap-3">
+                    <Link
+                      href="/jobs"
+                      className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]"
+                    >
+                      Start later from jobs
+                    </Link>
                     <button
                       type="button"
                       onClick={() => setCurrentSection('description')}

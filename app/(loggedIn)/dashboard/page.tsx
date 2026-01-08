@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Clock, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, Sparkles, Timer, TrendingUp } from "lucide-react";
 
 const statCards = [
   {
@@ -40,7 +40,6 @@ const candidates = [
     match: 91,
     signals: "Frontend, TS, UI",
     stage: "Shortlisted",
-    avatar: "https://i.pravatar.cc/64?img=8",
     tone: "from-[#22c55e] to-[#16a34a]",
   },
   {
@@ -48,7 +47,6 @@ const candidates = [
     match: 87,
     signals: "React, Design, CSS",
     stage: "Review",
-    avatar: "https://i.pravatar.cc/64?img=15",
     tone: "from-[#fb923c] to-[#f97316]",
   },
   {
@@ -56,7 +54,6 @@ const candidates = [
     match: 78,
     signals: "Next, Node, SQL",
     stage: "Review",
-    avatar: "https://i.pravatar.cc/64?img=32",
     tone: "from-[#f472b6] to-[#db2777]",
   },
   {
@@ -64,10 +61,28 @@ const candidates = [
     match: 66,
     signals: "Jest, RTL, CI",
     stage: "Hold",
-    avatar: "https://i.pravatar.cc/64?img=5",
     tone: "from-[#a5b4fc] to-[#6366f1]",
   },
 ];
+
+const timeSavingsData = [
+  { label: "Mon", minutes: 42 },
+  { label: "Tue", minutes: 55 },
+  { label: "Wed", minutes: 63 },
+  { label: "Thu", minutes: 71 },
+  { label: "Fri", minutes: 64 },
+  { label: "Sat", minutes: 38 },
+  { label: "Sun", minutes: 46 },
+];
+
+const successRateData = [
+  { label: "Week 1", value: 82 },
+  { label: "Week 2", value: 86 },
+  { label: "Week 3", value: 89 },
+  { label: "Week 4", value: 93 },
+];
+
+const maxTimeSaved = Math.max(...timeSavingsData.map((item) => item.minutes));
 
 export default function DashboardPage() {
   return (
@@ -81,7 +96,7 @@ export default function DashboardPage() {
         <div className="relative space-y-6">
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">Welcome back</p>
-            <h1 className="text-3xl font-semibold leading-tight text-[#1f2a44] sm:text-4xl">Welcome back, Recruiter</h1>
+            <h1 className="text-3xl font-semibold leading-tight text-[#1f2a44] sm:text-4xl">Welcome back, Rafid</h1>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -103,6 +118,73 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-3">
         <section className="space-y-6 rounded-[28px] border border-white/60 bg-white/80 p-5 shadow-card-soft backdrop-blur xl:col-span-2 xl:p-6">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-4 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-xl bg-[#f5f0ff] p-2 text-primary-500">
+                    <Timer className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#1f2a44]">AI time saved</h3>
+                    <p className="text-sm text-[#8a90a6]">Vs manual CV review (per day)</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold text-[#1f2a44]">12.4h</p>
+                  <p className="text-xs text-[#8a90a6]">saved this week</p>
+                </div>
+              </div>
+              <div className="flex items-end gap-3 rounded-2xl border border-white/70 bg-gradient-to-b from-[#f7f2fb] to-white p-3">
+                {timeSavingsData.map((item) => (
+                  <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
+                    <div className="flex h-28 w-full items-end rounded-lg bg-white/60 p-1 shadow-inner">
+                      <div
+                        className="w-full rounded-lg bg-gradient-to-t from-[#f3b5d6] via-[#b294ff] to-[#7c5dfa]"
+                        style={{ height: `${(item.minutes / maxTimeSaved) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold text-[#8a90a6]">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-[#8a90a6]">AI auto-sorting trims repetitive screening and gives recruiters their time back.</p>
+            </div>
+
+            <div className="space-y-4 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-xl bg-[#fff3f9] p-2 text-[#f06292]">
+                    <TrendingUp className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#1f2a44]">Success rate</h3>
+                    <p className="text-sm text-[#8a90a6]">Shortlisted → interview-ready candidates</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold text-[#1f2a44]">93%</p>
+                  <p className="text-xs text-[#8a90a6]">+4.1% vs last cycle</p>
+                </div>
+              </div>
+              <div className="space-y-2 rounded-2xl border border-white/70 bg-gradient-to-b from-[#f0f5ff] via-white to-white p-3">
+                {successRateData.map((point) => (
+                  <div key={point.label} className="flex items-center gap-3">
+                    <span className="w-16 text-xs font-semibold text-[#1f2a44]">{point.label}</span>
+                    <div className="flex-1 overflow-hidden rounded-full bg-[#f0e8f7]">
+                      <div
+                        className="h-2 rounded-full bg-gradient-to-r from-[#7c5dfa] via-[#9c6cf8] to-[#f06292]"
+                        style={{ width: `${point.value}%` }}
+                      />
+                    </div>
+                    <span className="w-12 text-right text-xs font-semibold text-[#1f2a44]">{point.value}%</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-[#8a90a6]">Quality stays high as the CV sorter prioritizes signals that match your JD.</p>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold text-[#1f2a44]">Recent Screening Jobs</h2>
@@ -164,8 +246,8 @@ export default function DashboardPage() {
                 {candidates.map((candidate) => (
                   <div key={candidate.name} className="grid grid-cols-5 items-center px-4 py-3 text-sm text-[#1f2a44]">
                     <div className="col-span-2 flex items-center gap-3">
-                      <div className="h-10 w-10 overflow-hidden rounded-full border border-white/70 shadow-sm">
-                        <img src={candidate.avatar} alt={candidate.name} className="h-full w-full object-cover" />
+                      <div className={`grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br ${candidate.tone} text-sm font-bold text-white shadow-sm`}>
+                        {candidate.name.charAt(0)}
                       </div>
                       <span className="font-semibold">{candidate.name}</span>
                     </div>
