@@ -43,7 +43,7 @@ const NavLink = ({
 const Header = ({ isDark = false }: HeaderProps) => {
   const pathname = usePathname();
   const headerClass = isDark
-    ? "fixed top-0 left-0 w-full z-50 bg-transparent"
+    ? "absolute top-0 left-0 w-full z-50 bg-transparent"
     : "fixed top-0 left-0 w-full z-50 border-b border-zinc-200/80 bg-white/90 backdrop-blur shadow-[0_12px_30px_rgba(24,24,27,0.08)]";
 
   const titleClass = isDark ? "text-white" : "text-[#D80880]";

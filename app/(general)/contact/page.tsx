@@ -16,11 +16,8 @@ import {
   Users,
   Youtube,
 } from "lucide-react";
-import TextInput from "@/app/components/inputs/TextInput";
-import EmailInput from "@/app/components/inputs/EmailInput";
-import TextArea from "@/app/components/inputs/TextArea";
-import SelectBox from "@/app/components/inputs/SelectBox";
-import Button from "@/app/components/buttons/Button";
+import ContactForm from "@/app/components/contact/ContactForm";
+import PageTitle from "@/app/components/typography/PageTitle";
 
 type IconType = React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
@@ -160,12 +157,10 @@ export default function ContactPage() {
     <div className="relative bg-white">
       <DottedHeaderBg />
 
-      <div className="relative mx-auto max-w-6xl px-6 pt-24 pb-24">
+      <div className="relative mx-auto max-w-6xl px-6 pt-28 pb-24">
         <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-            <span className="inline-flex items-center rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-violet-600">
-              Contact
-            </span>
+            <PageTitle title="Contact"/>
             <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-zinc-900 sm:text-5xl">
               Give us a shout. We answer quickly.
             </h1>
@@ -218,68 +213,7 @@ export default function ContactPage() {
         </div>
 
         <div className="mt-16 grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm sm:p-10">
-            <p className="text-sm text-zinc-700">
-              Tell us a bit about your needs and we will route you to the right
-              specialist.
-            </p>
-
-            <form
-              className="mt-8 space-y-6"
-              onSubmit={(event) => {
-                event.preventDefault();
-              }}
-            >
-              <div className="grid gap-6 sm:grid-cols-2">
-                <TextInput
-                  label="Name"
-                  name="name"
-                  placeholder="Your name"
-                  isRequired
-                  autoComplete="name"
-                />
-                <EmailInput
-                  label="Work email"
-                  name="email"
-                  placeholder="you@company.com"
-                  isRequired
-                />
-              </div>
-
-              <div className="grid gap-6 sm:grid-cols-2">
-                <TextInput
-                  label="Company"
-                  name="company"
-                  placeholder="Company name"
-                  autoComplete="organization"
-                />
-                <SelectBox
-                  label="Topic"
-                  name="topic"
-                  placeholder="Choose an option"
-                  options={[
-                    { value: "sales", label: "Sales inquiry" },
-                    { value: "support", label: "Support" },
-                    { value: "press", label: "Press" },
-                    { value: "partnership", label: "Partnerships" },
-                  ]}
-                />
-              </div>
-
-              <TextInput label="Subject" name="subject" placeholder="How can we help?" />
-
-              <TextArea
-                label="Message"
-                name="message"
-                rows={6}
-                placeholder="Share details about your hiring goals..."
-              />
-
-              <Button type="submit">
-                Submit
-              </Button>
-            </form>
-          </div>
+          <ContactForm />
 
           <div className="space-y-8">
             <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">

@@ -1,235 +1,235 @@
-import type { JSX } from 'react';
-import Link from 'next/link';
-import {
-  PlusCircle,
-  ArrowUpRight,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  BarChart3,
-  Users2,
-  FileSearch,
-  Sparkles,
-} from 'lucide-react';
-import type { Job } from '../../types';
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, Clock, Sparkles } from "lucide-react";
 
-const recentJobs: Array<Job & { processedCount: number; totalCount: number }> = [
+const statCards = [
   {
-    id: 'job-1042',
-    title: 'Senior Backend Engineer',
-    status: 'completed',
-    createdAt: new Date(),
-    processedCount: 47,
-    totalCount: 47,
+    label: "Active jobs",
+    value: "3",
+    helper: "Running screenings",
+    gradient: "from-[#ffe2f1] via-[#fff5fb] to-white",
   },
   {
-    id: 'job-1041',
-    title: 'Product Designer',
-    status: 'processing',
-    createdAt: new Date(),
-    processedCount: 18,
-    totalCount: 63,
+    label: "Candidates",
+    value: "186",
+    helper: "Uploaded this month",
+    gradient: "from-[#e9e8ff] via-[#f3f2ff] to-white",
   },
   {
-    id: 'job-1036',
-    title: 'Data Scientist',
-    status: 'failed',
-    createdAt: new Date(),
-    processedCount: 0,
-    totalCount: 52,
+    label: "Shortlisted",
+    value: "24",
+    helper: "Top matches surfaced",
+    gradient: "from-[#f3e4ff] via-[#f9f2ff] to-white",
+  },
+  {
+    label: "Avg. time saved",
+    value: "58%",
+    helper: "Vs manual screening",
+    gradient: "from-[#e2f5ff] via-[#f0faff] to-white",
   },
 ];
 
-const statusStyles: Record<Job['status'], { icon: JSX.Element; badge: string; text: string }> = {
-  completed: {
-    icon: <CheckCircle2 className="h-4 w-4 text-success-400" />,
-    badge: 'border border-success-500/30 bg-success-500/10 text-success-700',
-    text: 'Completed',
-  },
-  processing: {
-    icon: <Loader2 className="h-4 w-4 animate-spin text-warning-400" />,
-    badge: 'border border-warning-500/30 bg-warning-500/10 text-warning-700',
-    text: 'Processing',
-  },
-  failed: {
-    icon: <AlertCircle className="h-4 w-4 text-danger-400" />,
-    badge: 'border border-danger-500/30 bg-danger-500/10 text-danger-700',
-    text: 'Failed',
-  },
-};
+const recentJobs = [
+  { title: "Frontend Developer", resumes: 68, status: "Active", tone: "from-[#34d399] to-[#16a34a]" },
+  { title: "Sales Executive", resumes: 41, status: "Paused", tone: "from-[#f9a8d4] to-[#ec4899]" },
+  { title: "Data Analyst", resumes: 77, status: "Completed", tone: "from-[#a5b4fc] to-[#6366f1]" },
+];
 
-const quickStats: Array<{
-  label: string;
-  value: string;
-  trend: string;
-  icon: typeof BarChart3;
-  accent: string;
-  borderClass: string;
-  iconBg: string;
-  iconColor: string;
-}> = [
+const candidates = [
   {
-    label: 'Jobs processed this week',
-    value: '12',
-    trend: '+3 vs last week',
-    icon: BarChart3,
-    accent: 'from-[#3D64FF]/15 via-transparent to-transparent',
-    borderClass: 'border-[#DCE0E0]',
-    iconBg: 'bg-[#FFFFFF]',
-    iconColor: 'text-[#3D64FF]',
+    name: "Ayesha Rahman",
+    match: 91,
+    signals: "Frontend, TS, UI",
+    stage: "Shortlisted",
+    avatar: "https://i.pravatar.cc/64?img=8",
+    tone: "from-[#22c55e] to-[#16a34a]",
   },
   {
-    label: 'CVs analyzed',
-    value: '378',
-    trend: '47 today',
-    icon: Users2,
-    accent: 'from-[#3D64FF]/12 via-transparent to-transparent',
-    borderClass: 'border-[#DCE0E0]',
-    iconBg: 'bg-[#FFFFFF]',
-    iconColor: 'text-[#3D64FF]',
+    name: "Rohan Mehta",
+    match: 87,
+    signals: "React, Design, CSS",
+    stage: "Review",
+    avatar: "https://i.pravatar.cc/64?img=15",
+    tone: "from-[#fb923c] to-[#f97316]",
   },
   {
-    label: 'Average match score',
-    value: '82%',
-    trend: '+4% vs last job',
-    icon: Sparkles,
-    accent: 'from-[#3D64FF]/12 via-transparent to-transparent',
-    borderClass: 'border-[#DCE0E0]',
-    iconBg: 'bg-[#FFFFFF]',
-    iconColor: 'text-[#3D64FF]',
+    name: "Nabila Khan",
+    match: 78,
+    signals: "Next, Node, SQL",
+    stage: "Review",
+    avatar: "https://i.pravatar.cc/64?img=32",
+    tone: "from-[#f472b6] to-[#db2777]",
+  },
+  {
+    name: "Aminul Islam",
+    match: 66,
+    signals: "Jest, RTL, CI",
+    stage: "Hold",
+    avatar: "https://i.pravatar.cc/64?img=5",
+    tone: "from-[#a5b4fc] to-[#6366f1]",
   },
 ];
 
 export default function DashboardPage() {
   return (
-    <div className="space-y-10 text-[#181B31]">
-      <section className="relative overflow-hidden rounded-4xl border border-[#DCE0E0]/80 bg-gradient-to-br from-[#FFFFFF] via-[#F2F4F8] to-[#FFFFFF] p-8 shadow-card-soft">
-        <div className="pointer-events-none absolute inset-0 opacity-80">
-          <div className="absolute -top-20 right-10 h-56 w-56 rounded-full bg-[#3D64FF]/15 blur-3xl" />
-          <div className="absolute -bottom-20 left-10 h-48 w-48 rounded-full bg-[#3D64FF]/12 blur-3xl" />
+    <div className="space-y-6 text-[#1f2a44]">
+      <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-white/80 p-6 shadow-card-soft backdrop-blur sm:p-8">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute right-10 top-6 h-32 w-32 rounded-full bg-[#f7e2f3] blur-3xl" />
+          <div className="absolute -left-6 bottom-0 h-36 w-36 rounded-full bg-[#e2e7ff] blur-3xl" />
+          <div className="absolute inset-x-10 top-10 h-24 rounded-full bg-gradient-to-r from-primary-100/70 via-transparent to-[#e0e7ff]/80 blur-[90px]" />
         </div>
-        <div className="relative flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-          <div className="max-w-xl space-y-4">
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#3D64FF]/15 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-[#3D64FF]">
-              <Sparkles className="h-4 w-4 text-[#3D64FF]" />
-              Intelligent hiring workspace
-            </span>
-            <h1 className="text-3xl font-semibold leading-tight text-[#181B31] md:text-4xl">Welcome back, Rafid</h1>
-            <p className="text-sm text-[#4B5563] md:text-base">
-              Your AI recruiter prioritized the latest candidate cohorts. Review insights or launch a new role to keep
-              your pipeline moving.
-            </p>
+        <div className="relative space-y-6">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">Welcome back</p>
+            <h1 className="text-3xl font-semibold leading-tight text-[#1f2a44] sm:text-4xl">Welcome back, Recruiter</h1>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/job/new"
-              className="inline-flex items-center justify-center rounded-full bg-[#3D64FF] px-5 py-3 text-sm font-semibold text-[#FFFFFF] transition hover:bg-[#4F72FF]"
-            >
-              <PlusCircle className="mr-2 h-5 w-5" />
-              Create new job
-            </Link>
-            <Link
-              href="/cv/analyze"
-              className="inline-flex items-center justify-center rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-5 py-3 text-sm font-semibold text-[#3D64FF] transition hover:bg-[#3D64FF]/20"
-            >
-              <FileSearch className="mr-2 h-5 w-5" />
-              Analyze single CV
-            </Link>
-            <Link
-              href="/history"
-              className="inline-flex items-center justify-center rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-5 py-3 text-sm font-semibold text-[#181B31] transition hover:bg-[#F0F2F8]"
-            >
-              View activity
-              <ArrowUpRight className="ml-2 h-4 w-4" />
-            </Link>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {statCards.map((stat) => (
+              <div
+                key={stat.label}
+                className={`relative overflow-hidden rounded-2xl border border-white/60 bg-gradient-to-r ${stat.gradient} p-4 shadow-sm`}
+              >
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a90a6]">{stat.label}</p>
+                  <p className="text-3xl font-semibold text-[#1f2a44]">{stat.value}</p>
+                  <p className="text-sm text-[#8a90a6]">{stat.helper}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="grid gap-5 md:grid-cols-3">
-        {quickStats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={stat.label}
-              className={`relative overflow-hidden rounded-3xl border ${stat.borderClass} bg-[#FFFFFF] p-6 shadow-card-soft`}
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br ${stat.accent}`} />
-              <div className="relative space-y-4">
-                <div
-                  className={`flex h-12 w-12 items-center justify-center rounded-2xl border border-[#DCE0E0] ${stat.iconBg} ${stat.iconColor}`}
-                >
-                  <Icon className="h-6 w-6" />
+      <div className="grid gap-6 xl:grid-cols-3">
+        <section className="space-y-6 rounded-[28px] border border-white/60 bg-white/80 p-5 shadow-card-soft backdrop-blur xl:col-span-2 xl:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[#1f2a44]">Recent Screening Jobs</h2>
+              <p className="text-sm text-[#8a90a6]">Latest uploads and status.</p>
+            </div>
+            <Link href="/history" className="text-sm font-semibold text-primary-500 transition hover:text-primary-600">
+              View all
+            </Link>
+          </div>
+
+          <div className="space-y-3">
+            {recentJobs.map((job) => (
+              <div
+                key={job.title}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-[#f6f0ff] to-[#fdf2f8] text-[#1f2a44]">
+                    <Sparkles className="h-5 w-5 text-primary-500" />
+                  </div>
+                  <div>
+                    <p className="text-base font-semibold text-[#1f2a44]">{job.title}</p>
+                    <p className="text-sm text-[#8a90a6]">{job.resumes} resumes</p>
+                  </div>
                 </div>
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`inline-flex min-w-[88px] justify-center rounded-full bg-gradient-to-r ${job.tone} px-3 py-1 text-xs font-semibold text-white shadow-sm`}
+                  >
+                    {job.status}
+                  </div>
+                  <div className="rounded-xl bg-[#f6f1fb] px-3 py-2 text-xs font-semibold text-[#8a90a6]">
+                    {job.resumes} resumes
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-[#1f2a44]">Top Candidates</h3>
+                <p className="text-sm text-[#8a90a6]">Ranked by AI match and signals.</p>
+              </div>
+              <div className="hidden text-xs font-semibold uppercase tracking-[0.18em] text-primary-500 sm:block">
+                Updated just now
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/70">
+              <div className="grid grid-cols-5 bg-[#f7f2fb] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#8a90a6]">
+                <span className="col-span-2">Candidate</span>
+                <span>Match</span>
+                <span>Top Signals</span>
+                <span className="text-right">Stage</span>
+              </div>
+              <div className="divide-y divide-[#f0e8f7] bg-white">
+                {candidates.map((candidate) => (
+                  <div key={candidate.name} className="grid grid-cols-5 items-center px-4 py-3 text-sm text-[#1f2a44]">
+                    <div className="col-span-2 flex items-center gap-3">
+                      <div className="h-10 w-10 overflow-hidden rounded-full border border-white/70 shadow-sm">
+                        <img src={candidate.avatar} alt={candidate.name} className="h-full w-full object-cover" />
+                      </div>
+                      <span className="font-semibold">{candidate.name}</span>
+                    </div>
+                    <div>
+                      <span
+                        className={`inline-flex min-w-[48px] justify-center rounded-full bg-gradient-to-r ${candidate.tone} px-3 py-1 text-sm font-bold text-white`}
+                      >
+                        {candidate.match}
+                      </span>
+                    </div>
+                    <div className="text-[#8a90a6]">{candidate.signals}</div>
+                    <div className="text-right">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#f6f1fb] px-3 py-1 text-xs font-semibold text-[#8a90a6]">
+                        <Clock className="h-3.5 w-3.5" />
+                        {candidate.stage}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-[#8a90a6]">Tip: Click "Open" to view scoring explanation & resume highlights.</p>
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-4 rounded-[28px] border border-white/60 bg-white/80 p-5 shadow-card-soft backdrop-blur xl:p-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">Start a new shortlist</p>
+            <h3 className="text-2xl font-semibold text-[#1f2a44]">Add your role and upload CVs</h3>
+            <p className="text-sm text-[#8a90a6]">Bulk upload and let AI screen instantly.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-white/70 bg-gradient-to-r from-[#ffe7f5] to-[#fff7fb] p-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-primary-500 shadow-sm">1</div>
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#8A94A6]">{stat.label}</p>
-                  <p className="mt-3 text-3xl font-semibold text-[#181B31]">{stat.value}</p>
-                  <p className="mt-1 text-sm text-[#8A94A6]">{stat.trend}</p>
+                  <p className="text-sm font-semibold text-[#1f2a44]">Add Job Description</p>
+                  <p className="text-sm text-[#8a90a6]">Paste JD or upload PDF/DOCX.</p>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </section>
-
-      <section className="relative overflow-hidden rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] shadow-card-soft">
-        <div className="pointer-events-none absolute -top-20 right-6 h-52 w-52 rotate-12 rounded-full bg-[#3D64FF]/15 blur-3xl" />
-        <div className="relative">
-          <div className="flex flex-col gap-4 border-b border-[#DCE0E0] px-6 py-6 sm:flex-row sm:items-center sm:justify-between md:px-8">
-            <div>
-              <h2 className="text-lg font-semibold text-[#181B31]">Recent jobs</h2>
-              <p className="text-sm text-[#8A94A6]">Last 30 days of processing activity.</p>
+            <div className="rounded-2xl border border-white/70 bg-gradient-to-r from-[#f0f5ff] to-white p-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-[#3D64FF] shadow-sm">2</div>
+                <div>
+                  <p className="text-sm font-semibold text-[#1f2a44]">Upload CVs</p>
+                  <p className="text-sm text-[#8a90a6]">Bulk upload and let AI screen instantly.</p>
+                </div>
+              </div>
             </div>
-            <Link
-              href="/history"
-              className="inline-flex items-center gap-1 text-sm font-semibold text-[#3D64FF] transition hover:text-[#3D64FF]"
-            >
-              View history
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
           </div>
-          <ul className="divide-y divide-[#DCE0E0]">
-            {recentJobs.map((job) => {
-              const status = statusStyles[job.status];
-              return (
-                <li key={job.id} className="px-6 py-5 transition hover:bg-[#F0F2F8] md:px-8">
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-base font-semibold text-[#181B31]">{job.title}</h3>
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${status.badge}`}
-                        >
-                          {status.icon}
-                          {status.text}
-                        </span>
-                      </div>
-                      <p className="text-sm text-[#8A94A6]">Job ID: {job.id}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-6 text-sm text-[#8A94A6]">
-                      <div>
-                        <p className="text-base font-semibold text-[#181B31]">{job.processedCount}</p>
-                        <p className="text-xs text-[#8A94A6]">CVs processed</p>
-                      </div>
-                      <div>
-                        <p className="text-base font-semibold text-[#181B31]">{job.totalCount}</p>
-                        <p className="text-xs text-[#8A94A6]">Total uploaded</p>
-                      </div>
-                      <Link
-                        href={`/results/${job.id}`}
-                        className="inline-flex items-center gap-1 text-sm font-semibold text-[#3D64FF] transition hover:text-[#3D64FF]"
-                      >
-                        View results
-                        <ArrowUpRight className="h-4 w-4" />
-                      </Link>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </section>
+
+          <button className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]">
+            <CheckCircle2 className="h-4 w-4" />
+            Upload &amp; Screen Now
+          </button>
+          <button className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#efe7f5] bg-white px-4 py-3 text-sm font-semibold text-[#8a90a6] shadow-sm transition hover:-translate-y-0.5 hover:border-primary-200 hover:text-primary-500">
+            Import from ATS
+            <ArrowRight className="h-4 w-4" />
+          </button>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c1c5d6]">Coming soon</p>
+        </section>
+      </div>
     </div>
   );
 }
