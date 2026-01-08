@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import Button from "@/app/components/buttons/Button";
@@ -68,6 +69,8 @@ function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
 }
 
 export default function LoginPage() {
+  const router = useRouter();
+
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-white via-[#fdf4ff] to-[#eef4ff]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_500px_at_10%_20%,rgba(216,8,128,0.08),transparent),radial-gradient(700px_400px_at_90%_10%,rgba(59,130,246,0.12),transparent)]" />
@@ -152,6 +155,7 @@ export default function LoginPage() {
                 className="space-y-5"
                 onSubmit={(event) => {
                   event.preventDefault();
+                  router.push("/dashboard");
                 }}
               >
                 <EmailInput

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
@@ -12,7 +13,6 @@ import {
   LogOut,
   Puzzle,
   Settings,
-  Sparkles,
   UserRound,
   Users2,
   Plus,
@@ -36,9 +36,9 @@ const navItems: NavItem[] = [
   { label: "Credits", href: "/credits", icon: CreditCard },
   { label: "Candidates", href: "/cv/analyze", icon: Users2 },
   { label: "Reports", href: "/history", icon: BarChart3 },
-  { label: "Team", href: "/account", icon: UserRound },
-  { label: "Integrations", href: "/account", icon: Puzzle },
-  { label: "Settings", href: "/account", icon: Settings },
+  { label: "Account", href: "/account", icon: UserRound },
+  { label: "Integrations", href: "/integrations", icon: Puzzle },
+  { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export default function LeftMenu({
@@ -50,6 +50,36 @@ export default function LeftMenu({
   const pathname = usePathname();
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
+  const [credits, setCredits] = useState<{ remaining: number; total: number } | null>(null);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCredits = async () => {
+      try {
+        const response = await fetch("/api/credits/balance");
+        if (!response.ok) throw new Error("Failed to load credits");
+        const data = await response.json();
+        if (isMounted) setCredits({ remaining: data.remaining, total: data.total });
+      } catch (error) {
+        console.error(error);
+        if (isMounted) setCredits(null);
+      } finally {
+        if (isMounted) setIsLoadingCredits(false);
+      }
+    };
+
+    loadCredits();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const creditUsage =
+    credits?.total && credits.total > 0
+      ? Math.min(100, Math.round((credits.remaining / credits.total) * 100))
+      : 0;
 
   const handleLogout = () => {
     router.push("/auth/login");
@@ -132,21 +162,32 @@ export default function LeftMenu({
         <div className="mt-auto space-y-3">
           <div className="space-y-3 rounded-xl border border-white/60 bg-white/70 p-4 shadow-inner backdrop-blur">
             <div className="flex items-center justify-between text-sm font-semibold text-[#1f2a44]">
-              <span>Monthly Usage</span>
-              <span className="text-xs text-[#8a90a6]">42 / 100 resumes</span>
+              <span>carriX credits</span>
+              <span className="text-xs text-[#8a90a6]">
+                {isLoadingCredits
+                  ? "Loading..."
+                  : `${credits?.remaining?.toLocaleString() ?? "-"} / ${credits?.total?.toLocaleString() ?? "-"}`
+                }
+              </span>
             </div>
-            <div className="h-2 rounded-full bg-[#f4e9f5]">
-              <div className="h-2 w-[42%] rounded-full bg-gradient-to-r from-primary-500 to-[#f06292] shadow-[0_6px_20px_-10px_rgba(216,8,128,0.75)]" />
+            <div
+              className={`h-2 rounded-full bg-[#f4e9f5] ${isLoadingCredits ? "animate-pulse" : ""}`}
+              aria-hidden
+            >
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-primary-500 to-[#f06292] shadow-[0_6px_20px_-10px_rgba(216,8,128,0.75)]"
+                style={{ width: `${creditUsage}%` }}
+              />
             </div>
           </div>
 
           <button
             type="button"
-            className="flex w-full items-center justify-between rounded-xl border border-white/70 bg-white/80 px-4 py-3 text-sm font-semibold text-[#1f2a44] shadow-sm transition hover:-translate-y-0.5 hover:border-primary-200 hover:text-primary-500"
+            className="mb-2 flex w-full items-center justify-between rounded-xl border border-red-100 bg-red-50/80 px-4 py-3 text-sm font-semibold text-red-700 shadow-sm transition hover:-translate-y-0.5 hover:border-red-200 hover:bg-red-100 hover:text-red-800"
             onClick={handleLogout}
           >
             <span className="flex items-center gap-3 cursor-pointer">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-50 text-primary-600">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-red-100 text-red-600">
                 <LogOut className="h-5 w-5" />
               </span>
               <span>Log out</span>
