@@ -18,7 +18,14 @@ const ADMIN_PREFIX = "/admin";
 const authSecret = process.env.NEXTAUTH_SECRET ?? "dev-secret-change-me";
 
 export async function middleware(req: NextRequest) {
-  const token = await getToken({ req, secret: authSecret });
+  const isSecure = req.nextUrl.protocol === "https:";
+  const token = await getToken({
+    req,
+    secret: authSecret,
+    // NextAuth v5 sets a __Secure- prefix on HTTPS, so we need to tell getToken
+    // to look for the secure cookie in production; otherwise it misses the session.
+    secureCookie: isSecure,
+  });
   const pathname = req.nextUrl.pathname;
 
   const isAuthRoute = pathname.startsWith("/auth");
