@@ -1,0 +1,1 @@
+// Shared enums live here.

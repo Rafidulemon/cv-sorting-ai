@@ -28,7 +28,7 @@ export default function Button({
   ...buttonProps
 }: ButtonProps) {
   const baseClasses =
-    "inline-flex items-center justify-center font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:translate-y-0";
+    "cursor-pointer inline-flex items-center justify-center font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:translate-y-0";
 
   const sizeClasses: Record<ButtonSize, string> = {
     sm: "text-xs px-4 py-2 rounded-lg gap-2",

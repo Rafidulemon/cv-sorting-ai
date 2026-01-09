@@ -20,21 +20,35 @@ export default function StickyHeader() {
       return;
     }
 
-    const hero = document.getElementById(heroId);
-    if (!hero) {
-      setIsDark(false);
-      return;
-    }
+    let observer: IntersectionObserver | null = null;
+    let cancelled = false;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsDark(entry.isIntersecting);
-      },
-      { threshold: 0.4 }
-    );
+    const attachObserver = () => {
+      const hero = document.getElementById(heroId);
+      if (!hero) {
+        // Keep dark styling until the hero mounts to avoid flashes.
+        setIsDark(true);
+        if (!cancelled) {
+          setTimeout(attachObserver, 80);
+        }
+        return;
+      }
 
-    observer.observe(hero);
-    return () => observer.disconnect();
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          setIsDark(entry.isIntersecting);
+        },
+        { threshold: 0.4 }
+      );
+
+      observer.observe(hero);
+    };
+
+    attachObserver();
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+    };
   }, [pathname]);
 
   return <Header isDark={isDark} />;

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { signOut } from "next-auth/react";
 import {
   Bell,
   ChevronDown,
@@ -27,9 +29,15 @@ export default function AdminHeader({
   breadcrumb,
   onToggleNav,
 }: AdminHeaderProps) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogout = () => setShowLogoutConfirm(true);
+  const confirmLogout = () => signOut({ callbackUrl: "/auth/login" });
+
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/80 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center gap-4 px-4 md:px-6">
+    <>
+      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/80 backdrop-blur">
+        <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center gap-4 px-4 md:px-6">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -130,6 +138,7 @@ export default function AdminHeader({
                   <button
                     type="button"
                     className="block w-full px-4 py-2 text-left transition hover:bg-slate-800"
+                    onClick={handleLogout}
                   >
                     Logout
                   </button>
@@ -138,7 +147,35 @@ export default function AdminHeader({
             </div>
           </details>
         </div>
-      </div>
-    </header>
+        </div>
+      </header>
+
+      {showLogoutConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-zinc-900">Log out</h3>
+            <p className="mt-2 text-sm text-zinc-600">
+              Are you sure you want to log out of your admin session?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+                onClick={confirmLogout}
+              >
+                Log out
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

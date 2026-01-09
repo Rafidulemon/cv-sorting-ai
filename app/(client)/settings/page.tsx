@@ -141,7 +141,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/account"
+                href="/profile"
                 className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_36px_-24px_rgba(216,8,128,0.6)] transition hover:translate-y-[-2px]"
               >
                 Edit profile & team
@@ -203,7 +203,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <Link
-              href="/account"
+              href="/profile"
               className="text-sm font-semibold text-primary-600 transition hover:text-primary-500"
             >
               Manage team

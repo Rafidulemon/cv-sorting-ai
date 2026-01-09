@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Clock3, ShieldCheck, Sparkles } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, SVGProps, FormEvent } from "react";
+import { useState, useTransition } from "react";
+import { signIn } from "next-auth/react";
 import Button from "@/app/components/buttons/Button";
 import EmailInput from "@/app/components/inputs/EmailInput";
 import TextInput from "@/app/components/inputs/TextInput";
@@ -61,7 +63,8 @@ function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
       variant="white"
       fullWidth
       leftIcon={<GoogleIcon />}
-      className="border-zinc-200 text-zinc-800 shadow-sm hover:border-zinc-300 hover:shadow"
+      className="border-zinc-200 text-zinc-400 shadow-none hover:border-zinc-200 hover:shadow-none"
+      disabled
     >
       {label}
     </Button>
@@ -70,6 +73,29 @@ function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    startTransition(async () => {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid credentials. Please try again.");
+        return;
+      }
+
+      router.push("/dashboard");
+    });
+  }
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-white via-[#fdf4ff] to-[#eef4ff]">
@@ -146,23 +172,22 @@ export default function LoginPage() {
               <div className="my-6 flex items-center gap-3">
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
                 <span className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                  or continue with email
+                  continue with email
                 </span>
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
               </div>
 
               <form
                 className="space-y-5"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  router.push("/dashboard");
-                }}
+                onSubmit={handleSubmit}
               >
                 <EmailInput
                   label="Work email"
                   name="email"
                   placeholder="you@company.com"
                   autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   isRequired
                 />
                 <TextInput
@@ -171,6 +196,8 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   type="password"
                   autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                   isRequired
                 />
 
@@ -193,8 +220,15 @@ export default function LoginPage() {
                   </Link>
                 </div>
 
-                <Button type="submit" fullWidth rightIcon={<ArrowRight className="h-4 w-4" />}>
-                  Login
+                {error ? <p className="text-sm font-semibold text-rose-500">{error}</p> : null}
+
+                <Button
+                  type="submit"
+                  fullWidth
+                  disabled={isPending}
+                  rightIcon={<ArrowRight className="h-4 w-4" />}
+                >
+                  {isPending ? "Signing in..." : "Login"}
                 </Button>
               </form>
 

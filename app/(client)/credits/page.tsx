@@ -154,7 +154,7 @@ export default function CreditsPage() {
                   (renewalDate ? `Renewal on ${renewalDate} · ${balance?.plan ?? "Plan"}` : "Plan details unavailable")}
             </p>
             <Link
-              href="/account"
+              href="/profile"
               className="inline-flex items-center justify-center rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:bg-[#3D64FF]/15"
             >
               Manage plan

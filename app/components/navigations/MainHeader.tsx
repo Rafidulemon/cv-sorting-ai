@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Button from "../buttons/Button";
 
 type HeaderProps = {
@@ -42,6 +43,9 @@ const NavLink = ({
 
 const Header = ({ isDark = false }: HeaderProps) => {
   const pathname = usePathname();
+  const { status } = useSession();
+  const isLoading = status === "loading";
+  const isAuthenticated = status === "authenticated";
   const headerClass = isDark
     ? "absolute top-0 left-0 w-full z-50 bg-transparent"
     : "fixed top-0 left-0 w-full z-50 border-b border-zinc-200/80 bg-white/90 backdrop-blur shadow-[0_12px_30px_rgba(24,24,27,0.08)]";
@@ -117,15 +121,37 @@ const Header = ({ isDark = false }: HeaderProps) => {
         </nav>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button href="/auth/login" variant="white" size="sm" className={loginClass}>
-            Login
-          </Button>
-
-          <Button href="/auth/signup" variant="primary" size="sm" className={signupClass}>
-            Signup
-          </Button>
-        </div>
+        {isLoading ? (
+          <div className="flex items-center gap-3">
+            <span
+              className={`hidden h-10 w-24 rounded-full md:inline-flex ${
+                isDark ? "bg-white/15" : "bg-zinc-200/80"
+              } animate-pulse`}
+              aria-hidden
+            />
+            <span
+              className={`hidden h-10 w-28 rounded-full md:inline-flex ${
+                isDark ? "bg-white/15" : "bg-zinc-200/80"
+              } animate-pulse`}
+              aria-hidden
+            />
+          </div>
+        ) : isAuthenticated ? (
+          <div className="flex items-center gap-3">
+            <Button href="/dashboard" variant="primary" size="sm" className="hidden md:inline-flex">
+              Dashboard
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <Button href="/auth/login" variant="white" size="sm" className={loginClass}>
+              Login
+            </Button>
+            <Button href="/auth/signup" variant="primary" size="sm" className={signupClass}>
+              Signup
+            </Button>
+          </div>
+        )}
       </div>
     </header>
   );
