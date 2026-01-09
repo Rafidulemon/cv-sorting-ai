@@ -7,13 +7,14 @@ type PaginationProps = {
   totalItems: number;
   pageSize?: number;
   onPageChange: (nextPage: number) => void;
+  variant?: 'light' | 'dark';
 };
 
 type PageToken = number | 'ellipsis';
 
 const brandGradient = 'bg-gradient-to-r from-[#3D64FF] via-[#4F7BFF] to-[#3D64FF]';
 
-export function Pagination({ page, totalItems, pageSize = 5, onPageChange }: PaginationProps) {
+export function Pagination({ page, totalItems, pageSize = 5, onPageChange, variant = 'light' }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(page, 1), totalPages);
   const start = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
@@ -51,19 +52,30 @@ export function Pagination({ page, totalItems, pageSize = 5, onPageChange }: Pag
 
   const tokens = getPageTokens();
 
+  const containerClass =
+    variant === 'dark'
+      ? 'border-slate-800 bg-slate-900/80 text-slate-200'
+      : 'border-[#E5E7EB] bg-[#FFFFFF] text-[#1F2A44]';
+  const pillsClass =
+    variant === 'dark'
+      ? 'border-slate-800 bg-slate-900/70'
+      : 'border-[#E5E7EB] bg-[#EEF2F7]';
+  const prevNextDisabled = variant === 'dark' ? 'text-slate-500' : 'text-[#9CA3AF]';
+  const inactivePage = variant === 'dark' ? 'text-slate-300 hover:text-primary-200' : 'text-[#4B5563] hover:text-[#3D64FF]';
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#E5E7EB] bg-[#FFFFFF] px-4 py-3 text-sm text-[#1F2A44]">
-      <span className="text-xs text-[#6B7280]">
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${containerClass}`}>
+      <span className={`text-xs ${variant === 'dark' ? 'text-slate-400' : 'text-[#6B7280]'}`}>
         Showing {start}-{end} of {totalItems}
       </span>
-      <div className="flex items-center gap-3 rounded-full border border-[#E5E7EB] bg-[#EEF2F7] px-2 py-1">
+      <div className={`flex items-center gap-3 rounded-full border px-2 py-1 ${pillsClass}`}>
         <button
           type="button"
           onClick={() => goToPage(safePage - 1)}
           disabled={safePage === 1}
           className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition ${
             safePage === 1
-              ? 'cursor-not-allowed text-[#9CA3AF]'
+              ? `cursor-not-allowed ${prevNextDisabled}`
               : `${brandGradient} text-white shadow-[0_8px_24px_rgba(61,100,255,0.35)] hover:opacity-90`
           }`}
         >
@@ -83,7 +95,7 @@ export function Pagination({ page, totalItems, pageSize = 5, onPageChange }: Pag
                 className={`h-10 w-10 rounded-2xl text-sm font-semibold transition ${
                   token === safePage
                     ? `${brandGradient} text-white shadow-[0_8px_24px_rgba(61,100,255,0.35)]`
-                    : 'text-[#4B5563] hover:text-[#3D64FF]'
+                    : inactivePage
                 }`}
               >
                 {token}
@@ -97,7 +109,7 @@ export function Pagination({ page, totalItems, pageSize = 5, onPageChange }: Pag
           disabled={safePage === totalPages}
           className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition ${
             safePage === totalPages
-              ? 'cursor-not-allowed text-[#9CA3AF]'
+              ? `cursor-not-allowed ${prevNextDisabled}`
               : `${brandGradient} text-white shadow-[0_8px_24px_rgba(61,100,255,0.35)] hover:opacity-90`
           }`}
         >

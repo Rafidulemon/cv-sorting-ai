@@ -15,7 +15,7 @@ const socialLinks = [
   { label: "YouTube", href: "https://youtube.com", Icon: Youtube },
 ];
 
-export default function DashboardFooter() {
+export default function ClientFooter() {
   return (
     <footer className="rounded-xl border border-white/60 bg-white/70 px-4 py-4 text-sm text-[#6f7890] shadow-card-soft backdrop-blur sm:px-6 lg:px-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

@@ -3,17 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, Mail, Menu, RefreshCw, Search, X } from "lucide-react";
+import { Bell, Mail, RefreshCw, Search } from "lucide-react";
 
-type LoggedInHeaderProps = {
+type ClientHeaderProps = {
   isNavOpen: boolean;
   onToggleNav: () => void;
 };
 
-export default function LoggedInHeader({
-  isNavOpen,
-  onToggleNav,
-}: LoggedInHeaderProps) {
+export default function ClientHeader({
+}: ClientHeaderProps) {
   const [credits, setCredits] = useState<{ remaining: number; total: number } | null>(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
 

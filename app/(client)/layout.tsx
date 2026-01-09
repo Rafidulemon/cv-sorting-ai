@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import LoggedInHeader from "@/app/components/navigations/LoggedInHeader";
-import DashboardFooter from "@/app/components/navigations/DashboardFooter";
+import ClientHeader from "../components/navigations/ClientHeader";
+import ClientFooter from "@/app/components/navigations/ClientFooter";
 import LeftMenu from "@/app/components/navigations/LeftMenu";
 
 export default function LoggedInLayout({ children }: { children: ReactNode }) {
@@ -29,13 +29,13 @@ export default function LoggedInLayout({ children }: { children: ReactNode }) {
         ) : null}
 
         <div className="relative flex w-full flex-col gap-4">
-          <LoggedInHeader isNavOpen={isNavOpen} onToggleNav={toggleNav} />
+          <ClientHeader isNavOpen={isNavOpen} onToggleNav={toggleNav} />
           <main className="flex-1">
             <div className="rounded-xl border border-white/60 bg-white/70 p-4 shadow-card-soft backdrop-blur md:p-6">
               {children}
             </div>
           </main>
-          <DashboardFooter />
+          <ClientFooter />
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Mail, X } from 'lucide-react';
-import type { CandidateStage } from '@/app/(loggedIn)/results/data';
+import type { CandidateStage } from '@/app/(client)/results/data';
 
 type StageEmailModalProps = {
   open: boolean;
