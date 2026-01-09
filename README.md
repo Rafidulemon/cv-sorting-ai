@@ -11,22 +11,22 @@ carriX is a Next.js 16 / React 19 platform that automates CV intake, parsing, an
 6) **Follow-up & credits**: export shortlists, trigger candidate emails, and top up credits when needed.
 
 ### Subscription plans
-- **Free** — $0/month  
+- **Freemium** — $0/month  
   - 10 resumes/month  
   - Basic reasoning  
   - Add credits at **$2 per resume**  
-  - Seats: 1 owner (solo)
+  - Seats: 1 company member
 
 - **Standard** — $119/month billed annually (or $149 month-to-month)  
   - 100 resumes/month  
-  - 1 team seat  
+  - 1 company admin seat  
   - API access  
   - Advanced reasoning  
   - Integrations (coming soon)  
   - Advanced analytics (coming soon)  
   - Add credits at **$1.50 per resume**
 
-- **Premium** — $239/month billed annually (or $299 month-to-month)  
+- **Enterprise** — $239/month billed annually (or $299 month-to-month)  
   - 500 resumes/month  
   - 5 seats  
   - API access  
@@ -49,6 +49,11 @@ carriX is a Next.js 16 / React 19 platform that automates CV intake, parsing, an
   - Client console: `app/(client)/` (dashboard, jobs, CV analysis, history, settings, billing/credits).  
   - Admin console: `app/(admin)/admin/` (operational tooling; hidden from end-user flows).  
   - Shared components: `app/components/`.
+
+### Database & Prisma
+- Set `DATABASE_URL` (pooled Neon) and `DIRECT_URL` (non-pooled) in `.env` before running Prisma commands.
+- Useful scripts: `npm run prisma:push` (sync schema to dev DB), `npm run prisma:migrate -- --name <name>` (create migration), `npm run prisma:deploy` (apply in prod), `npm run prisma:studio` (inspect data).
+- Vector-related fields (`JobEmbedding.embedding`, `ResumeEmbedding.embedding`) are stored as `float8[]` for Prisma compatibility; enable the `vector` extension and convert them to `vector(1536)` plus IVFFlat/LSH indexes when you’re ready for pgvector-powered search.
 
 ### Local development
 ```bash

@@ -1,0 +1,602 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum OrgRole {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  COMPANY_MEMBER
+  VIEWER
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum PlanTier {
+  FREEMIUM
+  STANDARD
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum CreditLedgerType {
+  ALLOTMENT
+  PURCHASE
+  USAGE
+  REFUND
+  ADJUSTMENT
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  REVIEWING
+  COMPLETED
+  ARCHIVED
+}
+
+enum SortingState {
+  NOT_STARTED
+  PROCESSING
+  COMPLETED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  TEMPORARY
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  REVIEW
+  SHORTLIST
+  HOLD
+  REJECTED
+  HIRED
+}
+
+enum CvProcessingStatus {
+  UPLOADED
+  PARSING
+  EMBEDDING
+  SCORING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum QueueName {
+  CV_PIPELINE
+  NOTIFICATIONS
+  EXPORTS
+  MAINTENANCE
+}
+
+enum QueueStatus {
+  PENDING
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum FileProvider {
+  R2
+  S3
+}
+
+enum ExportFormat {
+  CSV
+  PDF
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  lastLoginAt   DateTime?
+  phone         String?
+  passwordHash  String?
+  defaultOrgId  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  defaultOrg        Organization?  @relation("UserDefaultOrg", fields: [defaultOrgId], references: [id])
+  accounts          Account[]
+  sessions          Session[]
+  memberships       Membership[]
+  membershipInvites Membership[]   @relation("MembershipInviter")
+  invitations       Invitation[]   @relation("InvitationInviter")
+  createdOrgs       Organization[] @relation("OrgCreator")
+  createdJobs       Job[]          @relation("JobCreator")
+  uploadedResumes   Resume[]       @relation("ResumeUploader")
+  uploadedFiles     FileObject[]   @relation("FileUploader")
+  exportRequests    ExportTask[]   @relation("ExportRequester")
+  pushDevices       PushDevice[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]     @relation("AuditActorLogs")
+  queueJobs         QueueJob[]     @relation("QueueJobOwner")
+}
+
+model Organization {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  planTier        PlanTier @default(FREEMIUM)
+  seatLimit       Int      @default(1)
+  resumeAllotment Int      @default(10)
+  creditsBalance  Int      @default(0)
+  billingEmail    String?
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy     User?                      @relation("OrgCreator", fields: [createdById], references: [id])
+  members       Membership[]
+  invitations   Invitation[]
+  subscriptions OrganizationSubscription[]
+  creditLedger  CreditLedger[]
+  jobs          Job[]
+  resumes       Resume[]
+  candidates    Candidate[]
+  files         FileObject[]
+  applications  JobApplication[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  pushDevices   PushDevice[]
+  queueJobs     QueueJob[]
+  exportTasks   ExportTask[]
+  defaultUsers  User[]                     @relation("UserDefaultOrg")
+
+  @@index([planTier])
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  userId         String
+  organizationId String
+  role           OrgRole
+  status         MembershipStatus @default(ACTIVE)
+  invitedById    String?
+  lastActiveAt   DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invitedBy    User?        @relation("MembershipInviter", fields: [invitedById], references: [id])
+
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+}
+
+model Invitation {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrgRole
+  token          String    @unique
+  invitedById    String?
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invitedBy    User?        @relation("InvitationInviter", fields: [invitedById], references: [id])
+
+  @@index([organizationId, email])
+}
+
+model OrganizationSubscription {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  plan                   PlanTier
+  status                 SubscriptionStatus @default(TRIALING)
+  billingCycle           BillingCycle       @default(MONTHLY)
+  seats                  Int
+  resumesIncluded        Int
+  renewsOn               DateTime?
+  startsOn               DateTime           @default(now())
+  endsOn                 DateTime?
+  provider               String?
+  externalCustomerId     String?
+  externalSubscriptionId String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, status])
+}
+
+model CreditLedger {
+  id             String           @id @default(cuid())
+  organizationId String
+  amount         Int
+  type           CreditLedgerType
+  referenceType  String?
+  referenceId    String?
+  description    String?
+  expiresAt      DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, createdAt])
+}
+
+model Job {
+  id             String          @id @default(cuid())
+  organizationId String
+  createdById    String?
+  title          String
+  status         JobStatus       @default(DRAFT)
+  sortingState   SortingState    @default(NOT_STARTED)
+  description    String?
+  requirements   Json?
+  seniority      String?
+  employmentType EmploymentType?
+  locations      String[]        @default([])
+  tags           String[]        @default([])
+  openings       Int             @default(1)
+  salaryMin      Int?
+  salaryMax      Int?
+  currency       String?         @default("USD")
+  publishedAt    DateTime?
+  closesAt       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  createdBy    User?        @relation("JobCreator", fields: [createdById], references: [id])
+
+  applications  JobApplication[]
+  resumes       Resume[]
+  embedding     JobEmbedding?
+  queueJobs     QueueJob[]
+  exportTasks   ExportTask[]
+  notifications Notification[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, sortingState])
+}
+
+model JobEmbedding {
+  id        String   @id @default(cuid())
+  jobId     String   @unique
+  embedding Float[]
+  createdAt DateTime @default(now())
+
+  job Job @relation(fields: [jobId], references: [id])
+}
+
+model Candidate {
+  id              String   @id @default(cuid())
+  organizationId  String
+  fullName        String
+  email           String?
+  phone           String?
+  location        String?
+  headline        String?
+  source          String?
+  currentCompany  String?
+  currentTitle    String?
+  linkedinUrl     String?
+  githubUrl       String?
+  portfolioUrl    String?
+  yearsExperience Int?
+  tags            String[] @default([])
+  primaryResumeId String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization     @relation(fields: [organizationId], references: [id])
+  primaryResume Resume?          @relation("CandidatePrimaryResume", fields: [primaryResumeId], references: [id])
+  resumes       Resume[]         @relation("CandidateResumes")
+  applications  JobApplication[]
+  notifications Notification[]
+  queueJobs     QueueJob[]
+
+  @@index([organizationId, email])
+}
+
+model Resume {
+  id              String             @id @default(cuid())
+  organizationId  String
+  candidateId     String
+  jobId           String?
+  fileId          String
+  uploadedById    String?
+  status          CvProcessingStatus @default(UPLOADED)
+  errorMessage    String?
+  extractedText   String?
+  extractedFields Json?
+  lastScoredAt    DateTime?
+  overallScore    Float?
+  scoreBreakdown  Json?
+  ocrStartedAt    DateTime?
+  processedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  candidate    Candidate    @relation("CandidateResumes", fields: [candidateId], references: [id])
+  job          Job?         @relation(fields: [jobId], references: [id])
+  file         FileObject   @relation(fields: [fileId], references: [id])
+  uploadedBy   User?        @relation("ResumeUploader", fields: [uploadedById], references: [id])
+
+  chunks       ResumeEmbedding[]
+  applications JobApplication[]
+  primaryFor   Candidate?        @relation("CandidatePrimaryResume")
+
+  @@index([organizationId, jobId])
+  @@index([candidateId])
+}
+
+model ResumeEmbedding {
+  id         String   @id @default(cuid())
+  resumeId   String
+  chunkIndex Int
+  text       String
+  embedding  Float[]
+  createdAt  DateTime @default(now())
+
+  resume Resume @relation(fields: [resumeId], references: [id])
+
+  @@unique([resumeId, chunkIndex])
+}
+
+model JobApplication {
+  id              String            @id @default(cuid())
+  organizationId  String
+  jobId           String
+  candidateId     String
+  resumeId        String?
+  status          ApplicationStatus @default(SUBMITTED)
+  fitScore        Float?
+  aiSummary       String?
+  scoreBreakdown  Json?
+  rank            Int?
+  notes           String?
+  lastEvaluatedAt DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  job          Job          @relation(fields: [jobId], references: [id])
+  candidate    Candidate    @relation(fields: [candidateId], references: [id])
+  resume       Resume?      @relation(fields: [resumeId], references: [id])
+
+  @@index([organizationId, jobId, status])
+  @@index([candidateId])
+}
+
+model FileObject {
+  id             String       @id @default(cuid())
+  organizationId String
+  key            String
+  bucket         String
+  provider       FileProvider
+  region         String?
+  mimeType       String?
+  size           Int?
+  checksum       String?
+  uploadedById   String?
+  tags           String[]     @default([])
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  uploadedBy   User?        @relation("FileUploader", fields: [uploadedById], references: [id])
+  resumes      Resume[]
+  exportTasks  ExportTask[]
+
+  @@unique([organizationId, key])
+  @@index([provider])
+}
+
+model Notification {
+  id             String              @id @default(cuid())
+  organizationId String
+  userId         String?
+  candidateId    String?
+  jobId          String?
+  channel        NotificationChannel
+  type           String
+  payload        Json?
+  status         NotificationStatus  @default(PENDING)
+  queuedJobId    String?
+  sentAt         DateTime?
+  readAt         DateTime?
+  error          String?
+  createdAt      DateTime            @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+  candidate    Candidate?   @relation(fields: [candidateId], references: [id])
+  job          Job?         @relation(fields: [jobId], references: [id])
+  queueJob     QueueJob?    @relation("NotificationQueueJob", fields: [queuedJobId], references: [id])
+
+  @@index([organizationId, channel, status])
+}
+
+model PushDevice {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  token          String
+  platform       String
+  locale         String?
+  lastSeenAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, token])
+  @@index([userId])
+}
+
+model QueueJob {
+  id             String      @id @default(cuid())
+  organizationId String?
+  userId         String?
+  candidateId    String?
+  jobId          String?
+  queue          QueueName
+  status         QueueStatus @default(PENDING)
+  attempts       Int         @default(0)
+  maxAttempts    Int         @default(3)
+  payload        Json?
+  result         Json?
+  error          String?
+  scheduledFor   DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  failedAt       DateTime?
+  workerId       String?
+  parentId       String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization  Organization?  @relation(fields: [organizationId], references: [id])
+  owner         User?          @relation("QueueJobOwner", fields: [userId], references: [id])
+  candidate     Candidate?     @relation(fields: [candidateId], references: [id])
+  job           Job?           @relation(fields: [jobId], references: [id])
+  parent        QueueJob?      @relation("SubtaskParent", fields: [parentId], references: [id])
+  children      QueueJob[]     @relation("SubtaskParent")
+  notifications Notification[] @relation("NotificationQueueJob")
+  exportTasks   ExportTask[]
+
+  @@index([queue, status])
+  @@index([organizationId])
+}
+
+model ExportTask {
+  id             String       @id @default(cuid())
+  organizationId String
+  jobId          String?
+  requestedById  String?
+  queueJobId     String?
+  fileId         String?
+  format         ExportFormat
+  status         QueueStatus  @default(PENDING)
+  parameters     Json?
+  createdAt      DateTime     @default(now())
+  completedAt    DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  job          Job?         @relation(fields: [jobId], references: [id])
+  requestedBy  User?        @relation("ExportRequester", fields: [requestedById], references: [id])
+  queueJob     QueueJob?    @relation(fields: [queueJobId], references: [id])
+  file         FileObject?  @relation(fields: [fileId], references: [id])
+
+  @@index([organizationId, status])
+}
+
+model AuditLog {
+  id             String         @id @default(cuid())
+  organizationId String
+  actorUserId    String?
+  actorType      AuditActorType @default(USER)
+  action         String
+  entityType     String
+  entityId       String?
+  description    String?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  actor        User?        @relation("AuditActorLogs", fields: [actorUserId], references: [id])
+
+  @@index([organizationId, entityType])
+  @@index([actorUserId])
+}
+
+model Account {
+  id                 String   @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+  oauth_token_secret String?
+  oauth_token        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
