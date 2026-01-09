@@ -1,13 +1,10 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
 import type { Provider } from "next-auth/providers";
 import type { NextAuthConfig } from "next-auth";
 import bcrypt from "bcryptjs";
 import prisma from "@/app/lib/prisma";
 
-const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 const nextAuthSecret = process.env.NEXTAUTH_SECRET ?? "dev-secret-change-me";
 
 const providers: Provider[] = [
@@ -49,15 +46,6 @@ const providers: Provider[] = [
     },
   }) as Provider,
 ];
-
-if (googleClientId && googleClientSecret) {
-  providers.push(
-    Google({
-      clientId: googleClientId,
-      clientSecret: googleClientSecret,
-    }) as Provider,
-  );
-}
 
 export const authConfig: NextAuthConfig = {
   secret: nextAuthSecret,
