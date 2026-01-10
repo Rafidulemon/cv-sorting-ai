@@ -11,7 +11,7 @@ export type PricingPlan = {
   monthlyCredits: number;
   approxCvs: string;
   activeJobs: string;
-  team: string;
+  team: number;
   support: string;
   apiAccess: boolean;
   askAi: boolean;
@@ -50,7 +50,7 @@ export const pricingPlans: PricingPlan[] = [
     monthlyCredits: 10,
     approxCvs: "~6",
     activeJobs: "1",
-    team: "Individual",
+    team: 1,
     support: "Basic",
     apiAccess: false,
     askAi: false,
@@ -74,7 +74,7 @@ export const pricingPlans: PricingPlan[] = [
       "AI Job Description creation",
       "OCR support (quota-based)",
       "Semantic search",
-      "Up to 3 team members",
+      "Up to 5 team members",
       "Priority support",
       "Top-up: BDT 125 per 100 credits",
     ],
@@ -82,7 +82,7 @@ export const pricingPlans: PricingPlan[] = [
     monthlyCredits: 1500,
     approxCvs: "~1,000",
     activeJobs: "Up to 15",
-    team: "Up to 3",
+    team: 5,
     support: "Priority",
     apiAccess: false,
     askAi: true,
@@ -112,7 +112,7 @@ export const pricingPlans: PricingPlan[] = [
     monthlyCredits: 3500,
     approxCvs: "~2,300",
     activeJobs: "Unlimited",
-    team: "Up to 10",
+    team: 10,
     support: "SLA + priority",
     apiAccess: true,
     askAi: true,

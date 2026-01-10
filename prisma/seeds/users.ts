@@ -1,31 +1,34 @@
-import { OrgRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 
 type SeedUser = {
   id: string;
   firstName: string;
   lastName?: string;
-  role: OrgRole;
+  image?: string;
+  role: UserRole;
   email: string;
   phone?: string;
   password: string;
-  companyId: string;
+  companyId?: string | null;
 };
 
 export const users: SeedUser[] = [
   {
     id: '1',
     firstName: 'Carriastic',
-    role: OrgRole.SUPER_ADMIN,
+    image: '/images/default_dp.png',
+    role: UserRole.SUPER_ADMIN,
     email: 'carriastic@gmail.com',
     phone: '+8801990497796',
     password: 'Carriastic321*',
-    companyId: '1',
+    companyId: null,
   },
   {
     id: '2',
     firstName: 'Md. Rafidul',
     lastName: 'Islam',
-    role: OrgRole.COMPANY_ADMIN,
+    image: '/images/rafid.png',
+    role: UserRole.COMPANY_ADMIN,
     email: 'rafid.carriastic@gmail.com',
     phone: '+8801850700054',
     password: 'Carriastic4321*',
@@ -35,7 +38,8 @@ export const users: SeedUser[] = [
     id: '3',
     firstName: 'Ahsan Habib',
     lastName: 'Ethic',
-    role: OrgRole.COMPANY_ADMIN,
+    image: '/images/ethic.png',
+    role: UserRole.COMPANY_ADMIN,
     email: 'ethic.carriastic@gmail.com',
     phone: '+8801850700054',
     password: 'Carriastic4321*',
@@ -45,7 +49,8 @@ export const users: SeedUser[] = [
     id: '4',
     firstName: 'Syed Hasan',
     lastName: 'Ahmed',
-    role: OrgRole.COMPANY_ADMIN,
+    image: '/images/hasan.png',
+    role: UserRole.COMPANY_ADMIN,
     email: 'hasan.carriastic@gmail.com',
     phone: '+8801850700054',
     password: 'Carriastic4321*',
@@ -55,7 +60,8 @@ export const users: SeedUser[] = [
     id: '5',
     firstName: 'Test',
     lastName: 'HR',
-    role: OrgRole.COMPANY_MEMBER,
+    image: '/images/default_dp.png',
+    role: UserRole.COMPANY_MEMBER,
     email: 'carriastic.hr@gmail.com',
     phone: '+8801850700054',
     password: 'Carriastic54321*',
@@ -64,7 +70,8 @@ export const users: SeedUser[] = [
   {
     id: '6',
     firstName: 'Viewer',
-    role: OrgRole.VIEWER,
+    image: '/images/default_dp.png',
+    role: UserRole.VIEWER,
     email: 'rafidulemon@gmail.com',
     phone: '+8801850700054',
     password: 'Carriastic21*',

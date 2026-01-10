@@ -9,6 +9,18 @@ type AdminPricingPayload = {
   freePlanNudge: FreePlanNudge;
 };
 
+const parseTeamCount = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const match = value.match(/(\d+)/);
+    if (match) {
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+};
+
 function ensureSuperAdmin(session: any) {
   const role = session?.user?.role;
   if (role !== "SUPER_ADMIN") {
@@ -81,7 +93,7 @@ export async function PUT(request: NextRequest) {
           monthlyCredits: plan.monthlyCredits,
           approxCvs: plan.approxCvs,
           activeJobs: plan.activeJobs,
-          team: plan.team,
+          team: parseTeamCount(plan.team),
           support: plan.support,
           apiAccess: plan.apiAccess,
           askAi: plan.askAi,
@@ -103,7 +115,7 @@ export async function PUT(request: NextRequest) {
           monthlyCredits: plan.monthlyCredits,
           approxCvs: plan.approxCvs,
           activeJobs: plan.activeJobs,
-          team: plan.team,
+          team: parseTeamCount(plan.team),
           support: plan.support,
           apiAccess: plan.apiAccess,
           askAi: plan.askAi,

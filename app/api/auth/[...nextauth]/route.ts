@@ -22,7 +22,7 @@ const providers: Provider[] = [
 
       const user = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, email: true, name: true, passwordHash: true },
+        select: { id: true, email: true, name: true, passwordHash: true, image: true },
       });
 
       if (!user?.passwordHash) return null;
@@ -40,6 +40,7 @@ const providers: Provider[] = [
         id: user.id,
         email: user.email ?? undefined,
         name: user.name ?? undefined,
+        image: user.image ?? undefined,
         role: membership?.role ?? null,
         organizationId: membership?.organizationId ?? null,
       };
@@ -59,6 +60,7 @@ export const authConfig: NextAuthConfig = {
         (token as any).accessToken = (account as any).access_token;
       }
       if (profile?.picture) (token as any).picture = profile.picture;
+      if ((user as any)?.image) (token as any).picture = (user as any).image;
       if (user?.email) (token as any).email = user.email;
       if (user?.id) (token as any).id = user.id;
       if ((user as any)?.role) (token as any).role = (user as any).role;

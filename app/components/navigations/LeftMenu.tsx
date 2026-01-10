@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -54,6 +54,7 @@ export default function LeftMenu({
     pathname === href || pathname.startsWith(`${href}/`);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const role = (session as any)?.user?.role as string | undefined;
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   const navItems = useMemo(() => {
     const items = [...baseNavItems];
@@ -74,6 +75,28 @@ export default function LeftMenu({
 
   const cancelLogout = () => setShowLogoutConfirm(false);
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadCompanyName = async () => {
+      try {
+        const response = await fetch("/api/company");
+        if (!response.ok) return;
+        const payload = await response.json();
+        const name = typeof payload?.organization?.name === "string" ? payload.organization.name : null;
+        if (isMounted) {
+          setCompanyName(name);
+        }
+      } catch (error) {
+        console.error("[LeftMenu] Unable to load company name", error);
+      }
+    };
+
+    loadCompanyName();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <>
       <aside
@@ -88,7 +111,7 @@ export default function LeftMenu({
         </div>
         <div className="relative flex h-full flex-col gap-6">
           <div className="flex items-center justify-between">
-            <Link href="/dashboard" className="flex items-center gap-1 cursor-pointer">
+            <Link href="/dashboard" className="flex items-center gap-3 cursor-pointer">
               <Image
                 src="/logo/icon.png"
                 alt="carriX"
@@ -97,9 +120,14 @@ export default function LeftMenu({
                 className="h-10 w-10 object-contain"
               />
 
-              <p className="text-xl font-semibold transition-colors duration-300 text-[#D80880]">
-                carriX
-              </p>
+              <div className="leading-tight">
+                <p className="text-xl font-semibold transition-colors duration-300 text-[#D80880]">
+                  carriX
+                </p>
+                <p className="text-xs font-semibold text-[#6b7280]">
+                  {companyName ?? "Loading workspace…"}
+                </p>
+              </div>
             </Link>
             <button
               type="button"

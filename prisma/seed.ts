@@ -2,10 +2,10 @@ import {
   BillingCycle,
   CreditLedgerType,
   MembershipStatus,
-  OrgRole,
   PlanTier,
   PrismaClient,
   SubscriptionStatus,
+  UserRole,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { orgs } from './seeds/orgs';
@@ -39,7 +39,7 @@ const planDefaultsBySlug: Record<
     label: 'Standard',
     monthlyCredits: 1500,
     approxCvAllowance: 1000,
-    seatLimit: 3,
+    seatLimit: 5,
     planTier: PlanTier.STANDARD,
   },
   premium: {
@@ -133,6 +133,31 @@ async function main() {
     },
   });
 
+  for (const user of users) {
+    const passwordHash = await hashPassword(user.password);
+    const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.firstName;
+
+    await prisma.user.upsert({
+      where: { email: user.email },
+      update: {
+        name,
+        phone: user.phone,
+        defaultOrgId: null,
+        passwordHash,
+        image: user.image ?? '/images/default_dp.png',
+      },
+      create: {
+        id: user.id,
+        name,
+        email: user.email,
+        phone: user.phone,
+        defaultOrgId: null,
+        passwordHash,
+        image: user.image ?? '/images/default_dp.png',
+      },
+    });
+  }
+
   for (const org of orgs) {
     const planDetails = planDefaultsBySlug[org.planSlug] ?? planDefaultsBySlug.standard;
     const seatLimit = planDetails?.seatLimit ?? org.seatLimit;
@@ -145,12 +170,22 @@ async function main() {
       update: {
         name: org.name,
         slug: org.slug,
+        ownerId: org.ownerId,
+        website: org.website,
+        domain: org.domain,
+        industry: org.industry,
+        size: org.size,
+        region: org.region,
+        hqLocation: org.hqLocation,
+        phone: org.phone,
+        description: org.description,
         planTier,
         planSlug: org.planSlug,
         seatLimit,
         resumeAllotment,
         creditsBalance,
         billingEmail: org.billingEmail,
+        logo: org.logo ?? '/logo/carriastic_logo.png',
       },
       create: {
         ...org,
@@ -159,6 +194,7 @@ async function main() {
         seatLimit,
         resumeAllotment,
         creditsBalance,
+        logo: org.logo ?? '/logo/carriastic_logo.png',
       },
     });
 
@@ -208,26 +244,9 @@ async function main() {
   }
 
   for (const user of users) {
-    const passwordHash = await hashPassword(user.password);
-    const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.firstName;
-
-    await prisma.user.upsert({
-      where: { email: user.email },
-      update: {
-        name,
-        phone: user.phone,
-        defaultOrgId: user.companyId,
-        passwordHash,
-      },
-      create: {
-        id: user.id,
-        name,
-        email: user.email,
-        phone: user.phone,
-        defaultOrgId: user.companyId,
-        passwordHash,
-      },
-    });
+    if (!user.companyId) {
+      continue;
+    }
 
     await prisma.membership.upsert({
       where: {
@@ -243,9 +262,14 @@ async function main() {
       create: {
         userId: user.id,
         organizationId: user.companyId,
-        role: user.role as OrgRole,
+        role: user.role as UserRole,
         status: MembershipStatus.ACTIVE,
       },
+    });
+
+    await prisma.user.update({
+      where: { email: user.email },
+      data: { defaultOrgId: user.companyId },
     });
   }
 }

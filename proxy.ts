@@ -17,7 +17,7 @@ const CLIENT_ROUTE_PREFIXES = [
 const ADMIN_PREFIX = "/admin";
 const authSecret = process.env.NEXTAUTH_SECRET ?? "dev-secret-change-me";
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const isSecure = req.nextUrl.protocol === "https:";
   const token = await getToken({
     req,

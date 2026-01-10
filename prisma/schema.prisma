@@ -9,7 +9,7 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum OrgRole {
+enum UserRole {
   SUPER_ADMIN
   COMPANY_ADMIN
   COMPANY_MEMBER
@@ -151,6 +151,7 @@ model User {
   membershipInvites Membership[]   @relation("MembershipInviter")
   invitations       Invitation[]   @relation("InvitationInviter")
   createdOrgs       Organization[] @relation("OrgCreator")
+  ownedOrganizations Organization[] @relation("OrgOwner")
   createdJobs       Job[]          @relation("JobCreator")
   uploadedResumes   Resume[]       @relation("ResumeUploader")
   uploadedFiles     FileObject[]   @relation("FileUploader")
@@ -165,6 +166,16 @@ model Organization {
   id              String       @id @default(cuid())
   name            String
   slug            String       @unique
+  ownerId         String
+  website         String?
+  logo            String?
+  domain          String?
+  industry        String?
+  size            String?
+  region          String?
+  hqLocation      String?
+  phone           String?
+  description     String?
   planTier        PlanTier     @default(FREEMIUM)
   planSlug        String       @default("free")
   seatLimit       Int          @default(1)
@@ -175,6 +186,7 @@ model Organization {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
+  owner         User                      @relation("OrgOwner", fields: [ownerId], references: [id])
   createdBy     User?                      @relation("OrgCreator", fields: [createdById], references: [id])
   plan          PricingPlan                @relation(fields: [planSlug], references: [slug])
   members       Membership[]
@@ -193,6 +205,7 @@ model Organization {
   exportTasks   ExportTask[]
   defaultUsers  User[]                     @relation("UserDefaultOrg")
 
+  @@index([ownerId])
   @@index([planTier])
   @@index([planSlug])
 }
@@ -201,7 +214,7 @@ model Membership {
   id             String           @id @default(cuid())
   userId         String
   organizationId String
-  role           OrgRole
+  role           UserRole
   status         MembershipStatus @default(ACTIVE)
   invitedById    String?
   lastActiveAt   DateTime?
@@ -220,7 +233,7 @@ model Invitation {
   id             String    @id @default(cuid())
   organizationId String
   email          String
-  role           OrgRole
+  role           UserRole
   token          String    @unique
   invitedById    String?
   expiresAt      DateTime
@@ -288,7 +301,7 @@ model PricingPlan {
   monthlyCredits  Int
   approxCvs       String
   activeJobs      String
-  team            String
+  team            Int
   support         String
   apiAccess       Boolean  @default(false)
   askAi           Boolean  @default(false)

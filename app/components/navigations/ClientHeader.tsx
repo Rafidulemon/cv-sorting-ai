@@ -1,22 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { Bell, Mail, Menu, RefreshCw, Search, X } from "lucide-react";
+import { Bell, Menu, RefreshCw, Search, X } from "lucide-react";
 
 type ClientHeaderProps = {
   isNavOpen: boolean;
   onToggleNav: () => void;
 };
 
-type CreditPayload = { remaining: number; total: number; used?: number; plan?: string };
+type CreditPayload = {
+  remaining: number;
+  total: number;
+  used?: number;
+  plan?: string;
+};
 
-export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderProps) {
+export default function ClientHeader({
+  isNavOpen,
+  onToggleNav,
+}: ClientHeaderProps) {
   const { data: session } = useSession();
   const [credits, setCredits] = useState<CreditPayload | null>(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
+  const defaultAvatar = "/images/default_dp.png";
+  const allowedAvatarHosts = useMemo(() => ["images.unsplash.com"], []);
+  const [avatarSrc, setAvatarSrc] = useState(defaultAvatar);
 
   useEffect(() => {
     let isMounted = true;
@@ -33,7 +44,7 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
           return;
         }
         const data = await response.json();
-        console.log("Data: ", data)
+        console.log("Data: ", data);
         if (isMounted) {
           setCredits({
             remaining: data.remaining,
@@ -54,10 +65,27 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
   const creditUsage = credits?.total
     ? Math.min(100, Math.round((credits.remaining / credits.total) * 100))
     : 0;
-  const userName = session?.user?.name ?? session?.user?.email ?? "User";
-  const avatarSrc =
-    session?.user?.image ??
-    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&w=200&h=200&q=80";
+  useEffect(() => {
+    const raw = session?.user?.image?.trim();
+    if (!raw) {
+      setAvatarSrc(defaultAvatar);
+      return;
+    }
+    if (raw.startsWith("/")) {
+      setAvatarSrc(raw);
+      return;
+    }
+    try {
+      const url = new URL(raw);
+      if (allowedAvatarHosts.includes(url.hostname)) {
+        setAvatarSrc(raw);
+        return;
+      }
+    } catch {
+      // fall through
+    }
+    setAvatarSrc(defaultAvatar);
+  }, [session?.user?.image, allowedAvatarHosts]);
 
   return (
     <header className="rounded-xl border border-white/70 bg-gradient-to-r from-[#fbf8ff] via-[#f7f3ff] to-[#fbf9ff] p-4 shadow-[0_24px_55px_-34px_rgba(84,65,122,0.35)] backdrop-blur">
@@ -69,7 +97,11 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#e6dff5] bg-white/90 text-[#8e86a9] shadow-[0_12px_32px_-22px_rgba(82,66,139,0.4)] transition hover:-translate-y-0.5 hover:border-primary-200 hover:text-primary-500 md:hidden"
             aria-label={isNavOpen ? "Close navigation" : "Open navigation"}
           >
-            {isNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {isNavOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
           </button>
 
           <div className="relative flex-1 w-full">
@@ -113,13 +145,18 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
                           total: data.total,
                           used: data.used,
                           plan: data.plan,
-                        }),
+                        })
                       )
                       .catch((err) => {
                         console.error(err);
                         setCredits(null);
                       })
-                      .finally(() => setIsLoadingCredits(false));
+                      .finally(() => {
+                        setIsLoadingCredits(false);
+                        if (typeof window !== "undefined") {
+                          window.dispatchEvent(new Event("company:refresh"));
+                        }
+                      });
                   }}
                   className="cursor-pointer inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#3D64FF] shadow-sm transition hover:scale-[1.01]"
                   title="Refresh credits"
@@ -129,11 +166,15 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
                 <span className="text-sm font-medium text-base">
                   Remaining{" "}
                   <span className="font-semibold">
-                    {isLoadingCredits ? "…" : credits?.remaining?.toLocaleString() ?? "—"}
+                    {isLoadingCredits
+                      ? "…"
+                      : credits?.remaining?.toLocaleString() ?? "—"}
                   </span>{" "}
                   /{" "}
                   <span className="font-semibold">
-                    {isLoadingCredits ? "…" : credits?.total?.toLocaleString() ?? "—"}
+                    {isLoadingCredits
+                      ? "…"
+                      : credits?.total?.toLocaleString() ?? "—"}
                   </span>{" "}
                   carriX Credit
                 </span>
@@ -163,8 +204,7 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
           >
             <Bell className="h-5 w-5" />
           </button>
-          <Link href="/account" className="cursor-pointer flex items-center gap-3 rounded-full border border-[#e6dff5] bg-white/90 px-2 py-2 shadow-[0_16px_38px_-28px_rgba(82,66,139,0.36)]">
-
+          <Link href="/profile" className="cursor-pointer">
             <div className="relative h-11 w-11 overflow-hidden rounded-full border border-[#e6dff5] bg-white shadow-[0_12px_30px_-20px_rgba(82,66,139,0.4)]">
               <Image
                 src={avatarSrc}
@@ -172,6 +212,7 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
                 fill
                 sizes="44px"
                 className="object-cover"
+                onError={() => setAvatarSrc(defaultAvatar)}
               />
             </div>
           </Link>

@@ -20,6 +20,18 @@ type AdminPricingState = {
   freePlanNudge: FreePlanNudge;
 };
 
+const toTeamCount = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const match = value.match(/(\\d+)/);
+    if (match) {
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+};
+
 export default function PlansPage() {
   const [data, setData] = useState<AdminPricingState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +47,10 @@ export default function PlansPage() {
       if (!res.ok) throw new Error(`Failed to load pricing (${res.status})`);
       const body = await res.json();
       setData({
-        plans: (body.plans ?? []) as EditablePlan[],
+        plans: (body.plans ?? []).map((plan: EditablePlan) => ({
+          ...plan,
+          team: toTeamCount((plan as any)?.team),
+        })),
         creditUsage: (body.creditUsage ?? []) as CreditUsageRow[],
         freePlanNudge: (body.freePlanNudge ??
           {
@@ -269,9 +284,15 @@ export default function PlansPage() {
               <label className="space-y-1">
                 <span className="text-xs text-slate-400">Team</span>
                 <input
+                  type="number"
                   className="w-full rounded-md border border-slate-800 bg-slate-800/60 px-2 py-1"
                   value={plan.team}
-                  onChange={(e) => updatePlan(plan.slug, (p) => ({ ...p, team: e.target.value }))}
+                  onChange={(e) =>
+                    updatePlan(plan.slug, (p) => ({
+                      ...p,
+                      team: Number(e.target.value) || 0,
+                    }))
+                  }
                 />
               </label>
               <label className="space-y-1">
@@ -465,7 +486,8 @@ export default function PlansPage() {
               <li key={plan.slug} className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-primary-400" aria-hidden />
                 <span>
-                  {plan.name}: {plan.monthlyCredits.toLocaleString()} credits, {plan.activeJobs}, {plan.team}
+                  {plan.name}: {plan.monthlyCredits.toLocaleString()} credits, {plan.activeJobs},{" "}
+                  {plan.team} seats
                 </span>
               </li>
             ))}
