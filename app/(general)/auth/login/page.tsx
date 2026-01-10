@@ -8,7 +8,7 @@ import { useState, useTransition } from "react";
 import { signIn } from "next-auth/react";
 import Button from "@/app/components/buttons/Button";
 import EmailInput from "@/app/components/inputs/EmailInput";
-import TextInput from "@/app/components/inputs/TextInput";
+import PasswordInput from "@/app/components/inputs/PasswordInput";
 
 type Highlight = {
   title: string;
@@ -190,11 +190,10 @@ export default function LoginPage() {
                   onChange={(event) => setEmail(event.target.value)}
                   isRequired
                 />
-                <TextInput
+                <PasswordInput
                   label="Password"
                   name="password"
                   placeholder="••••••••"
-                  type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}

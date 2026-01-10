@@ -5,6 +5,7 @@ import { ArrowRight, BadgeCheck, BarChart3, Users } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import Button from "@/app/components/buttons/Button";
 import EmailInput from "@/app/components/inputs/EmailInput";
+import PasswordInput from "@/app/components/inputs/PasswordInput";
 import TextInput from "@/app/components/inputs/TextInput";
 import SelectBox from "@/app/components/inputs/SelectBox";
 
@@ -200,11 +201,10 @@ export default function SignUpPage() {
                   ]}
                 />
 
-                <TextInput
+                <PasswordInput
                   label="Password"
                   name="password"
                   placeholder="Create a strong password"
-                  type="password"
                   autoComplete="new-password"
                   isRequired
                 />

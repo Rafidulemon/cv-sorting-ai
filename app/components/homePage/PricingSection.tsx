@@ -1,53 +1,15 @@
 import React from "react";
 import { ArrowRight, Check } from "lucide-react";
 
-type Plan = {
-  name: string;
-  description: string;
-  price: string;
-  period: string;
-  features: string[];
-  highlight?: boolean;
-};
+import { getPricingData } from "@/app/lib/getPricingData";
+import type { PricingPlan } from "@/app/data/pricing";
 
-const plans: Plan[] = [
-  {
-    name: "Starter",
-    description: "Great for small teams testing AI hiring workflows.",
-    price: "$9.99",
-    period: "per month",
-    features: [
-      "Up to 3 open job positions",
-      "50 CVs processed per job",
-      "2 AI expert evaluations per CV",
-    ],
-  },
-  {
-    name: "Standard",
-    description: "Best for growing teams that need consistent hiring volume.",
-    price: "$29.99",
-    period: "per month",
-    features: [
-      "Up to 5 open job positions",
-      "100 CVs processed per job",
-      "3 AI expert evaluations per CV",
-    ],
-    highlight: true,
-  },
-  {
-    name: "Professional",
-    description: "Built for established businesses with complex hiring needs.",
-    price: "$59.99",
-    period: "per month",
-    features: [
-      "Up to 10 open job positions",
-      "200 CVs processed per job",
-      "5 AI expert evaluations per CV",
-    ],
-  },
-];
+const formatPrice = (amount: number) =>
+  amount === 0 ? "BDT 0" : new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", maximumFractionDigits: 0 }).format(amount);
 
-export default function PricingSection() {
+export default async function PricingSection() {
+  const { plans } = await getPricingData();
+
   return (
     <section className="bg-white py-20">
       <div className="mx-auto max-w-6xl px-6">
@@ -76,7 +38,7 @@ export default function PricingSection() {
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {plans.map((plan) => (
             <div
-              key={plan.name}
+              key={plan.slug}
               className={`rounded-3xl border bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md ${
                 plan.highlight
                   ? "border-primary-500/40 shadow-[0_20px_50px_rgba(216,8,128,0.18)]"
@@ -99,13 +61,13 @@ export default function PricingSection() {
 
               <div className="mt-6 flex items-end gap-2 text-zinc-900">
                 <div className="text-3xl font-extrabold tracking-tight">
-                  {plan.price}
+                  {formatPrice(plan.price)}
                 </div>
                 <div className="pb-1 text-xs text-zinc-500">{plan.period}</div>
               </div>
 
               <button className="mt-5 w-full rounded-full bg-primary-500 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-400 shadow-glow-primary">
-                Subscribe
+                {plan.cta}
               </button>
 
               <div className="mt-6 space-y-3 text-sm text-zinc-600">

@@ -162,19 +162,21 @@ model User {
 }
 
 model Organization {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
   name            String
-  slug            String   @unique
-  planTier        PlanTier @default(FREEMIUM)
-  seatLimit       Int      @default(1)
-  resumeAllotment Int      @default(10)
-  creditsBalance  Int      @default(0)
+  slug            String       @unique
+  planTier        PlanTier     @default(FREEMIUM)
+  planSlug        String       @default("free")
+  seatLimit       Int          @default(1)
+  resumeAllotment Int          @default(10)
+  creditsBalance  Int          @default(0)
   billingEmail    String?
   createdById     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   createdBy     User?                      @relation("OrgCreator", fields: [createdById], references: [id])
+  plan          PricingPlan                @relation(fields: [planSlug], references: [slug])
   members       Membership[]
   invitations   Invitation[]
   subscriptions OrganizationSubscription[]
@@ -192,6 +194,7 @@ model Organization {
   defaultUsers  User[]                     @relation("UserDefaultOrg")
 
   @@index([planTier])
+  @@index([planSlug])
 }
 
 model Membership {
@@ -234,6 +237,7 @@ model OrganizationSubscription {
   id                     String             @id @default(cuid())
   organizationId         String
   plan                   PlanTier
+  planSlug               String
   status                 SubscriptionStatus @default(TRIALING)
   billingCycle           BillingCycle       @default(MONTHLY)
   seats                  Int
@@ -248,8 +252,10 @@ model OrganizationSubscription {
   updatedAt              DateTime           @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  pricingPlan  PricingPlan  @relation(fields: [planSlug], references: [slug])
 
   @@index([organizationId, status])
+  @@index([planSlug])
 }
 
 model CreditLedger {
@@ -266,6 +272,51 @@ model CreditLedger {
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, createdAt])
+}
+
+model PricingPlan {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  name            String
+  description     String
+  price           Int
+  period          String
+  cta             String
+  highlight       Boolean  @default(false)
+  features        String[] @default([])
+  topUp           Int
+  monthlyCredits  Int
+  approxCvs       String
+  activeJobs      String
+  team            String
+  support         String
+  apiAccess       Boolean  @default(false)
+  askAi           Boolean  @default(false)
+  aiJd            Boolean  @default(false)
+  ocr             String   @default("No")
+  semanticSearch  Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organizations   Organization[]
+  subscriptions   OrganizationSubscription[]
+}
+
+model CreditUsage {
+  id        String   @id @default(cuid())
+  action    String   @unique
+  credits   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FreePlanNudge {
+  id        String   @id @default("default")
+  headline  String
+  bullets   String[] @default([])
+  banner    String
+  updatedAt DateTime @updatedAt
 }
 
 model Job {

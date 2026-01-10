@@ -1,103 +1,9 @@
 import React from "react";
 import { Check, Minus } from "lucide-react";
+import { getPricingData } from "@/app/lib/getPricingData";
 
-type Plan = {
-  name: string;
-  description: string;
-  price: string;
-  period: string;
-  cta: string;
-  highlight?: boolean;
-  features: string[];
-};
-
-type ComparisonRow = {
-  label: string;
-  values: Array<string | boolean>;
-};
-
-const plans: Plan[] = [
-  {
-    name: "Starter",
-    description:
-      "Ideal for startups and small businesses beginning to leverage AI for recruitment.",
-    price: "$9.99",
-    period: "per month",
-    cta: "Subscribe",
-    features: [
-      "Up to 3 open job positions",
-      "Up to 50 CVs processed per job",
-      "Two AI expert evaluations per CV",
-      "Email support",
-      "Basic analytics",
-    ],
-  },
-  {
-    name: "Standard",
-    description: "Perfect for growing businesses that need more recruitment power.",
-    price: "$29.99",
-    period: "per month",
-    cta: "Subscribe",
-    highlight: true,
-    features: [
-      "Up to 5 open job positions",
-      "Up to 100 CVs processed per job",
-      "Three AI expert evaluations per CV",
-      "High priority customer support",
-      "3 team seats",
-    ],
-  },
-  {
-    name: "Professional",
-    description:
-      "Designed for established businesses looking for comprehensive recruitment solutions.",
-    price: "$59.99",
-    period: "per month",
-    cta: "Subscribe",
-    features: [
-      "Up to 10 open job positions",
-      "Up to 200 CVs processed per job",
-      "Five AI expert evaluations per CV",
-      "High priority customer support",
-      "10 team seats",
-    ],
-  },
-];
-
-const comparisonRows: ComparisonRow[] = [
-  {
-    label: "Open job positions",
-    values: ["Up to 3", "Up to 5", "Up to 10"],
-  },
-  {
-    label: "CVs processed per job",
-    values: ["50", "100", "200"],
-  },
-  {
-    label: "AI expert evaluations per CV",
-    values: ["2", "3", "5"],
-  },
-  {
-    label: "Team seats",
-    values: ["1", "3", "10"],
-  },
-  {
-    label: "Priority customer support",
-    values: [false, true, true],
-  },
-  {
-    label: "Advanced analytics",
-    values: [false, true, true],
-  },
-  {
-    label: "Workflow automations",
-    values: [false, true, true],
-  },
-  {
-    label: "Dedicated success manager",
-    values: [false, false, true],
-  },
-];
+const formatPrice = (amount: number) =>
+  amount === 0 ? "BDT 0" : new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", maximumFractionDigits: 0 }).format(amount);
 
 function FeatureItem({ text }: { text: string }) {
   return (
@@ -110,7 +16,7 @@ function FeatureItem({ text }: { text: string }) {
   );
 }
 
-function ComparisonCell({ value }: { value: string | boolean }) {
+function ComparisonCell({ value }: { value: string | number | boolean }) {
   if (typeof value === "boolean") {
     return value ? (
       <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary-500/10 text-primary-500">
@@ -122,10 +28,26 @@ function ComparisonCell({ value }: { value: string | boolean }) {
       </span>
     );
   }
-  return <span className="text-sm font-semibold text-zinc-700">{value}</span>;
+  return <span className="text-sm font-semibold text-zinc-700">{String(value)}</span>;
 }
 
-export default function PricingComparisonSection() {
+export default async function PricingComparisonSection() {
+  const { plans, creditUsage, freePlanNudge } = await getPricingData();
+
+  const comparisonRows = [
+    { label: "Monthly credits", values: plans.map((plan) => plan.monthlyCredits.toLocaleString()) },
+    { label: "Approx CVs (1.5 credits/CV)", values: plans.map((plan) => plan.approxCvs) },
+    { label: "Active jobs", values: plans.map((plan) => plan.activeJobs) },
+    { label: "Ask AI about CV", values: plans.map((plan) => plan.askAi) },
+    { label: "AI Job Description creation", values: plans.map((plan) => plan.aiJd) },
+    { label: "OCR for scanned CVs", values: plans.map((plan) => plan.ocr) },
+    { label: "Semantic search", values: plans.map((plan) => plan.semanticSearch) },
+    { label: "Team members", values: plans.map((plan) => plan.team) },
+    { label: "API access", values: plans.map((plan) => plan.apiAccess) },
+    { label: "Support", values: plans.map((plan) => plan.support) },
+    { label: "Credit top-up (per 100 credits)", values: plans.map((plan) => plan.topUp) },
+  ];
+
   return (
     <section className="bg-white py-20" id="plans">
       <div className="mx-auto max-w-6xl px-6">
@@ -145,7 +67,7 @@ export default function PricingComparisonSection() {
         <div className="mt-12 grid gap-8 md:grid-cols-3">
           {plans.map((plan) => (
             <div
-              key={plan.name}
+              key={plan.slug}
               className={`rounded-3xl border bg-white p-8 shadow-sm transition ${
                 plan.highlight
                   ? "border-primary-500/50 shadow-[0_20px_60px_rgba(216,8,128,0.2)]"
@@ -165,7 +87,7 @@ export default function PricingComparisonSection() {
               </div>
 
               <div className="mt-8 flex items-end gap-2 text-zinc-900">
-                <div className="text-4xl font-extrabold tracking-tight">{plan.price}</div>
+                <div className="text-4xl font-extrabold tracking-tight">{formatPrice(plan.price)}</div>
                 <div className="pb-1 text-sm text-zinc-500">{plan.period}</div>
               </div>
 
@@ -180,6 +102,9 @@ export default function PricingComparisonSection() {
                 {plan.features.map((feature) => (
                   <FeatureItem key={feature} text={feature} />
                 ))}
+                <div className="text-xs font-semibold text-primary-600">
+                  BDT {plan.topUp} / 100 credits
+                </div>
               </div>
             </div>
           ))}
@@ -206,7 +131,7 @@ export default function PricingComparisonSection() {
               <div className="grid grid-cols-[1.2fr_repeat(3,1fr)] items-center gap-4 border-b border-zinc-200 px-6 py-4 text-sm font-semibold text-zinc-500">
                 <span>Feature</span>
                 {plans.map((plan) => (
-                  <span key={plan.name} className="text-center text-zinc-700">
+                  <span key={plan.slug} className="text-center text-zinc-700">
                     {plan.name}
                   </span>
                 ))}
@@ -230,6 +155,59 @@ export default function PricingComparisonSection() {
           <p className="mt-4 text-xs text-zinc-500">
             Need a custom plan or enterprise volume? Contact us for a tailored quote.
           </p>
+        </div>
+
+        <div className="mt-12 grid gap-6 lg:grid-cols-[1fr_0.9fr]">
+          <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                  Credit usage reference
+                </div>
+                <h3 className="mt-2 text-2xl font-bold text-zinc-900">What each action costs</h3>
+                <p className="mt-1 text-sm text-zinc-600">Credits represent AI usage — CV processing, Ask-AI, JD creation, OCR.</p>
+              </div>
+              <span className="rounded-full bg-primary-500/10 px-3 py-1 text-xs font-semibold text-primary-500">
+                Billed in credits
+              </span>
+            </div>
+
+            <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-200">
+              <div className="grid grid-cols-[1fr_0.5fr] bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-700">
+                <span>Action</span>
+                <span className="text-right">Credits</span>
+              </div>
+              {creditUsage.map(({ action, credits }) => (
+                <div key={action} className="grid grid-cols-[1fr_0.5fr] items-center px-4 py-3 text-sm text-zinc-700 even:bg-zinc-50">
+                  <span className="font-medium text-zinc-800">{action}</span>
+                  <span className="text-right font-semibold">{credits}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-primary-100 bg-primary-50/60 p-6 shadow-sm">
+            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-primary-600">
+              Why 10 free credits works
+            </div>
+            <h3 className="mt-2 text-2xl font-bold text-primary-900">
+              {freePlanNudge.headline}
+            </h3>
+            <ul className="mt-4 space-y-3 text-sm text-primary-900/80">
+              {freePlanNudge.bullets.map((item) => (
+                <li key={item} className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-primary-500 shadow-sm">
+                    <Check className="h-3.5 w-3.5" />
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-5 rounded-2xl bg-white/80 p-4 text-sm font-semibold text-primary-800 shadow-inner">
+              {freePlanNudge.banner}
+              <div className="text-xs font-medium text-primary-600">Surface this in-app to boost conversions.</div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

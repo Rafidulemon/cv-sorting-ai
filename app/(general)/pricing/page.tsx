@@ -2,6 +2,8 @@ import PricingComparisonSection from "@/app/components/pricing/PricingComparison
 import Button from "@/app/components/buttons/Button";
 import { WaveDivider } from "@/app/functions/WaveDivider";
 
+export const revalidate = 60;
+
 function Badge({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-medium text-white/85">

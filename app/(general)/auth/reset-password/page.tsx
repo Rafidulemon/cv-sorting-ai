@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, KeyRound, ShieldCheck, Sparkles } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
-import TextInput from "@/app/components/inputs/TextInput";
+import PasswordInput from "@/app/components/inputs/PasswordInput";
 
 export default function ResetPasswordPage() {
   return (
@@ -82,19 +82,17 @@ export default function ResetPasswordPage() {
                   event.preventDefault();
                 }}
               >
-                <TextInput
+                <PasswordInput
                   label="New password"
                   name="password"
                   placeholder="Create a strong password"
-                  type="password"
                   autoComplete="new-password"
                   isRequired
                 />
-                <TextInput
+                <PasswordInput
                   label="Confirm password"
                   name="confirmPassword"
                   placeholder="Re-enter your new password"
-                  type="password"
                   autoComplete="new-password"
                   isRequired
                 />

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -52,33 +52,8 @@ export default function LeftMenu({
   const pathname = usePathname();
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
-  const [credits, setCredits] = useState<{ remaining: number; total: number } | null>(null);
-  const [isLoadingCredits, setIsLoadingCredits] = useState(true);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const role = (session as any)?.user?.role as string | undefined;
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadCredits = async () => {
-      try {
-        const response = await fetch("/api/credits/balance");
-        if (!response.ok) throw new Error("Failed to load credits");
-        const data = await response.json();
-        if (isMounted) setCredits({ remaining: data.remaining, total: data.total });
-      } catch (error) {
-        console.error(error);
-        if (isMounted) setCredits(null);
-      } finally {
-        if (isMounted) setIsLoadingCredits(false);
-      }
-    };
-
-    loadCredits();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const navItems = useMemo(() => {
     const items = [...baseNavItems];
@@ -87,11 +62,6 @@ export default function LeftMenu({
     }
     return items;
   }, [role]);
-
-  const creditUsage =
-    credits?.total && credits.total > 0
-      ? Math.min(100, Math.round((credits.remaining / credits.total) * 100))
-      : 0;
 
   const handleLogout = () => {
     setShowLogoutConfirm(true);
@@ -177,27 +147,6 @@ export default function LeftMenu({
           </nav>
 
           <div className="mt-auto space-y-3">
-            <div className="space-y-3 rounded-xl border border-white/60 bg-white/70 p-4 shadow-inner backdrop-blur">
-              <div className="flex items-center justify-between text-sm font-semibold text-[#1f2a44]">
-                <span>carriX credits</span>
-                <span className="text-xs text-[#8a90a6]">
-                  {isLoadingCredits
-                    ? "Loading..."
-                    : `${credits?.remaining?.toLocaleString() ?? "-"} / ${credits?.total?.toLocaleString() ?? "-"}`
-                  }
-                </span>
-              </div>
-              <div
-                className={`h-2 rounded-full bg-[#f4e9f5] ${isLoadingCredits ? "animate-pulse" : ""}`}
-                aria-hidden
-              >
-                <div
-                  className="h-2 rounded-full bg-gradient-to-r from-primary-500 to-[#f06292] shadow-[0_6px_20px_-10px_rgba(216,8,128,0.75)]"
-                  style={{ width: `${creditUsage}%` }}
-                />
-              </div>
-            </div>
-
             <button
               type="button"
               className="mb-2 flex w-full items-center justify-between rounded-xl border border-red-100 bg-red-50/80 px-4 py-3 text-sm font-semibold text-red-700 shadow-sm transition hover:-translate-y-0.5 hover:border-red-200 hover:bg-red-100 hover:text-red-800"

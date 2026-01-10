@@ -6,9 +6,10 @@ export const orgs = [
     name: 'Carriastic',
     slug: 'carr',
     planTier: PlanTier.STANDARD,
-    seatLimit: 10,
-    resumeAllotment: 500,
-    creditsBalance: 0,
+    planSlug: 'standard',
+    seatLimit: 3,
+    resumeAllotment: 1000,
+    creditsBalance: 1500,
     billingEmail: 'carriastic@gmail.com',
   },
 ];

@@ -11,21 +11,36 @@ type ClientHeaderProps = {
   onToggleNav: () => void;
 };
 
+type CreditPayload = { remaining: number; total: number; used?: number; plan?: string };
+
 export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderProps) {
   const { data: session } = useSession();
-  const [credits, setCredits] = useState<{ remaining: number; total: number } | null>(null);
+  const [credits, setCredits] = useState<CreditPayload | null>(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadCredits = async () => {
+    loadCredits().catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+    async function loadCredits() {
       try {
         const response = await fetch("/api/credits/balance");
-        if (!response.ok) throw new Error("Failed to load credits");
+        if (!response.ok) {
+          if (isMounted) setCredits(null);
+          return;
+        }
         const data = await response.json();
+        console.log("Data: ", data)
         if (isMounted) {
-          setCredits({ remaining: data.remaining, total: data.total });
+          setCredits({
+            remaining: data.remaining,
+            total: data.total,
+            used: data.used,
+            plan: data.plan,
+          });
         }
       } catch (error) {
         console.error(error);
@@ -33,12 +48,7 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
       } finally {
         if (isMounted) setIsLoadingCredits(false);
       }
-    };
-
-    loadCredits();
-    return () => {
-      isMounted = false;
-    };
+    }
   }, []);
 
   const creditUsage = credits?.total
@@ -76,9 +86,46 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
 
         <div className="flex items-center justify-between gap-3 md:justify-end">
           <div className="hidden items-center gap-3 rounded-2xl border border-[#e6dff5] bg-white/90 px-4 py-2 text-[#5c5177] shadow-[0_16px_38px_-28px_rgba(82,66,139,0.36)] md:flex">
+            <div className="flex flex-col leading-tight">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8e86a9]">
+                Current Plan
+              </span>
+              <span className="text-base font-semibold text-[#5c5177]">
+                {isLoadingCredits ? "…" : credits?.plan ?? "—"}
+              </span>
+            </div>
+          </div>
+          <div className="hidden items-center gap-3 rounded-2xl border border-[#e6dff5] bg-white/90 px-4 py-2 text-[#5c5177] shadow-[0_16px_38px_-28px_rgba(82,66,139,0.36)] md:flex">
             <div className="flex flex-col gap-1">
               <div className="flex flex-row items-center gap-3">
-                <RefreshCw className="h-4 w-4 text-[#3D64FF]" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLoadingCredits(true);
+                    fetch("/api/credits/balance")
+                      .then(async (res) => {
+                        if (!res.ok) throw new Error("Failed to load credits");
+                        return res.json();
+                      })
+                      .then((data) =>
+                        setCredits({
+                          remaining: data.remaining,
+                          total: data.total,
+                          used: data.used,
+                          plan: data.plan,
+                        }),
+                      )
+                      .catch((err) => {
+                        console.error(err);
+                        setCredits(null);
+                      })
+                      .finally(() => setIsLoadingCredits(false));
+                  }}
+                  className="cursor-pointer inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#3D64FF] shadow-sm transition hover:scale-[1.01]"
+                  title="Refresh credits"
+                >
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                </button>
                 <span className="text-sm font-medium text-base">
                   Remaining{" "}
                   <span className="font-semibold">
@@ -92,7 +139,7 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
                 </span>
                 <Link
                   href="/credits"
-                  className="inline-flex items-center rounded-full bg-gradient-to-r from-primary-500 to-[#f06292] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-[0_12px_28px_-20px_rgba(216,8,128,0.55)] transition hover:translate-y-[-1px]"
+                  className="inline-flex items-center rounded-[12px] bg-gradient-to-r from-primary-500 to-[#f06292] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-[0_12px_28px_-20px_rgba(216,8,128,0.55)] transition hover:translate-y-[-1px]"
                 >
                   Buy more
                 </Link>
@@ -116,13 +163,8 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
           >
             <Bell className="h-5 w-5" />
           </button>
-          <div className="cursor-pointer flex items-center gap-3 rounded-full border border-[#e6dff5] bg-white/90 px-2 py-2 shadow-[0_16px_38px_-28px_rgba(82,66,139,0.36)]">
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#b8a6ff] to-[#8a7ae5] text-white shadow-[0_12px_25px_-16px_rgba(116,92,183,0.65)]">
-              <Mail className="h-4 w-4" />
-            </span>
-            <div className="leading-tight">
-              <p className="text-sm font-semibold text-[#5c5177]">{userName}</p>
-            </div>
+          <Link href="/account" className="cursor-pointer flex items-center gap-3 rounded-full border border-[#e6dff5] bg-white/90 px-2 py-2 shadow-[0_16px_38px_-28px_rgba(82,66,139,0.36)]">
+
             <div className="relative h-11 w-11 overflow-hidden rounded-full border border-[#e6dff5] bg-white shadow-[0_12px_30px_-20px_rgba(82,66,139,0.4)]">
               <Image
                 src={avatarSrc}
@@ -132,7 +174,7 @@ export default function ClientHeader({ isNavOpen, onToggleNav }: ClientHeaderPro
                 className="object-cover"
               />
             </div>
-          </div>
+          </Link>
         </div>
       </div>
     </header>
