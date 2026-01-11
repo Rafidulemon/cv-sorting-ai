@@ -129,6 +129,7 @@ export default function ProfilePage() {
                   fill
                   sizes="96px"
                   className="object-cover"
+                  unoptimized
                 />
               </div>
               <div className="space-y-3">

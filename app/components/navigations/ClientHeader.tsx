@@ -26,21 +26,6 @@ export default function ClientHeader({
   const [credits, setCredits] = useState<CreditPayload | null>(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
   const defaultAvatar = "/images/default_dp.png";
-  const allowedAvatarHosts = useMemo(
-    () => [
-      "images.unsplash.com",
-      "lh3.googleusercontent.com",
-      "lh4.googleusercontent.com",
-      "lh5.googleusercontent.com",
-      "lh6.googleusercontent.com",
-      "avatars.githubusercontent.com",
-      "res.cloudinary.com",
-      "cv-sorting-ai.vercel.app",
-      "carrix.ai",
-      "localhost",
-    ],
-    []
-  );
   const [avatarSrc, setAvatarSrc] = useState(defaultAvatar);
 
   useEffect(() => {
@@ -89,14 +74,9 @@ export default function ClientHeader({
       setAvatarSrc(raw);
       return;
     }
-    const currentHost =
-      typeof window !== "undefined" ? window.location.hostname : null;
     try {
       const url = new URL(raw);
-      if (
-        allowedAvatarHosts.includes(url.hostname) ||
-        (currentHost && url.hostname === currentHost)
-      ) {
+      if (url.protocol === "https:" || url.protocol === "http:") {
         setAvatarSrc(raw);
         return;
       }
@@ -104,7 +84,7 @@ export default function ClientHeader({
       // fall through
     }
     setAvatarSrc(defaultAvatar);
-  }, [session?.user?.image, allowedAvatarHosts]);
+  }, [session?.user?.image]);
 
   return (
     <header className="rounded-xl border border-white/70 bg-gradient-to-r from-[#fbf8ff] via-[#f7f3ff] to-[#fbf9ff] p-4 shadow-[0_24px_55px_-34px_rgba(84,65,122,0.35)] backdrop-blur">
@@ -231,6 +211,7 @@ export default function ClientHeader({
                 fill
                 sizes="44px"
                 className="object-cover"
+                unoptimized
                 onError={() => setAvatarSrc(defaultAvatar)}
               />
             </div>
