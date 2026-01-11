@@ -187,13 +187,16 @@ function MiniBarChart({ data, accent = "#3D64FF" }: { data: BarData[]; accent?: 
 }
 
 function ProgressMeter({ value, limit, label }: { value: number; limit: number; label: string }) {
-  const percent = limit > 0 ? Math.min(100, Math.round((value / limit) * 100)) : 0;
+  const safeLimit = Number.isFinite(limit) ? limit : 0;
+  const percent = safeLimit > 0 ? Math.min(100, Math.round((value / safeLimit) * 100)) : 0;
+  const limitLabel = safeLimit > 0 ? safeLimit : "—";
+  const percentLabel = safeLimit > 0 ? `${percent}%` : "—";
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs font-semibold text-[#4b5563]">
         <span>{label}</span>
         <span>
-          {value} / {limit} · {percent}%
+          {value} / {limitLabel} · {percentLabel}
         </span>
       </div>
       <div className="h-2 rounded-full bg-[#EEF2F7]">
@@ -366,14 +369,17 @@ function MemberDetailsModal({
                 <p className="text-xs text-[#6b7280]">{member?.email ?? "Select a member to view details"}</p>
               </div>
             </div>
-            <button
+            <Button
               type="button"
               onClick={onClose}
-              className="rounded-full p-2 text-[#6b7280] transition hover:bg-[#f2f4f7] hover:text-[#1f2a44]"
+              variant="ghost"
+              size="sm"
               aria-label="Close member details"
+              className="rounded-full !px-2 !py-2 text-[#6b7280] hover:bg-[#f2f4f7] hover:text-[#1f2a44]"
+              leftIcon={<X className="h-4 w-4" />}
             >
-              <X className="h-5 w-5" />
-            </button>
+              Close
+            </Button>
           </div>
 
           {error ? (
@@ -490,14 +496,13 @@ export default function CompanyPage() {
   const [planSnapshot, setPlanSnapshot] = useState({
     name: "Standard",
     renewal: "Renews soon",
-    seatLimit: 5,
+    seatLimit: 0,
     creditBalance: 1240,
     currency: "credits",
     cvSortedTotal: 4280,
     cvSortedThisMonth: 320,
     cvSortedTarget: 500,
   });
-  const canInviteMore = members.length < planSnapshot.seatLimit;
 
   const isCompanyAdmin = role === "COMPANY_ADMIN";
 
@@ -848,6 +853,9 @@ export default function CompanyPage() {
   };
 
   const seatsUsed = members.length;
+  const seatLimit = planSnapshot.seatLimit ?? 0;
+  const seatsRemaining = Math.max(seatLimit - seatsUsed, 0);
+  const canInviteMore = seatLimit > 0 && seatsRemaining > 0;
 
   const cvHistory: BarData[] = [
     { label: "Jan", value: 280 },
@@ -961,11 +969,11 @@ export default function CompanyPage() {
         />
         <MetricCard
           title="Total users"
-          value={`${seatsUsed} / ${planSnapshot.seatLimit}`}
+          value={`${seatsUsed} / ${seatLimit > 0 ? seatLimit : "—"}`}
           helper="Active members in this workspace"
           icon={Users2}
           accent="primary"
-          footer={<ProgressMeter value={seatsUsed} limit={planSnapshot.seatLimit} label="Seat usage" />}
+          footer={<ProgressMeter value={seatsUsed} limit={seatLimit} label="Seat usage" />}
         />
         <MetricCard
           title="Current balance"
@@ -1120,6 +1128,7 @@ export default function CompanyPage() {
               variant="secondary"
               size="sm"
               disabled={!canInviteMore || membersLoading}
+              title={seatLimit > 0 ? `${seatsRemaining} seats remaining` : "Seat limit not available yet"}
             >
               Invite members
             </Button>
@@ -1128,7 +1137,12 @@ export default function CompanyPage() {
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary-500" />
                 Syncing members…
               </div>
-            ) : null}
+            ) : (
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#f5f7fb] px-3 py-1.5 text-xs font-semibold text-[#4b5563]">
+                <Users2 className="h-3.5 w-3.5 text-primary-500" />
+                {seatLimit > 0 ? `${seatsRemaining} seats left` : "Seat limit syncing"}
+              </span>
+            )}
           </div>
         </div>
 

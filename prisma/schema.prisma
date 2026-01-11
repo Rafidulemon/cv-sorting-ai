@@ -139,6 +139,11 @@ model User {
   image         String?
   lastLoginAt   DateTime?
   phone         String?
+  title         String?
+  team          String?
+  timezone      String?
+  profileStatus String?
+  startedAt     DateTime?
   passwordHash  String?
   defaultOrgId  String?
   createdAt     DateTime  @default(now())
@@ -346,6 +351,9 @@ model Job {
   locations      String[]        @default([])
   tags           String[]        @default([])
   openings       Int             @default(1)
+  cvSortedCount  Int             @default(0)
+  cvAnalyzedCount Int            @default(0)
+  lastActivityAt DateTime?
   salaryMin      Int?
   salaryMax      Int?
   currency       String?         @default("USD")

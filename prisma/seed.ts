@@ -10,6 +10,7 @@ import {
 import bcrypt from 'bcryptjs';
 import { orgs } from './seeds/orgs';
 import { users } from './seeds/users';
+import { jobs } from './seeds/jobs';
 import {
   pricingPlans as pricingPlanSeeds,
   creditUsageRows as creditUsageSeeds,
@@ -142,18 +143,30 @@ async function main() {
       update: {
         name,
         phone: user.phone,
+        title: user.title,
+        team: user.team,
+        timezone: user.timezone,
+        profileStatus: user.profileStatus,
+        startedAt: user.startedAt,
         defaultOrgId: null,
         passwordHash,
         image: user.image ?? '/images/default_dp.png',
+        lastLoginAt: new Date(),
       },
       create: {
         id: user.id,
         name,
         email: user.email,
         phone: user.phone,
+        title: user.title,
+        team: user.team,
+        timezone: user.timezone,
+        profileStatus: user.profileStatus,
+        startedAt: user.startedAt,
         defaultOrgId: null,
         passwordHash,
         image: user.image ?? '/images/default_dp.png',
+        lastLoginAt: new Date(),
       },
     });
   }
@@ -258,18 +271,39 @@ async function main() {
       update: {
         role: user.role,
         status: MembershipStatus.ACTIVE,
+        lastActiveAt: new Date(),
       },
       create: {
         userId: user.id,
         organizationId: user.companyId,
         role: user.role as UserRole,
         status: MembershipStatus.ACTIVE,
+        lastActiveAt: new Date(),
       },
     });
 
     await prisma.user.update({
       where: { email: user.email },
       data: { defaultOrgId: user.companyId },
+    });
+  }
+
+  for (const job of jobs) {
+    await prisma.job.upsert({
+      where: { id: job.id },
+      update: {
+        organizationId: job.organizationId,
+        createdById: job.createdById,
+        title: job.title,
+        status: job.status,
+        sortingState: job.sortingState,
+        cvSortedCount: job.cvSortedCount,
+        cvAnalyzedCount: job.cvAnalyzedCount,
+        lastActivityAt: job.lastActivityAt,
+        publishedAt: job.publishedAt,
+        updatedAt: job.updatedAt,
+      },
+      create: job,
     });
   }
 }

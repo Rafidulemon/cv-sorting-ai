@@ -8,6 +8,11 @@ type SeedUser = {
   role: UserRole;
   email: string;
   phone?: string;
+  title?: string;
+  team?: string;
+  timezone?: string;
+  profileStatus?: string;
+  startedAt?: Date;
   password: string;
   companyId?: string | null;
 };
@@ -20,6 +25,11 @@ export const users: SeedUser[] = [
     role: UserRole.SUPER_ADMIN,
     email: 'carriastic@gmail.com',
     phone: '+8801990497796',
+    title: 'Founder',
+    team: 'Leadership',
+    timezone: 'GMT+6 · Dhaka',
+    profileStatus: 'Active',
+    startedAt: new Date('2023-01-15'),
     password: 'Carriastic321*',
     companyId: null,
   },
@@ -31,6 +41,11 @@ export const users: SeedUser[] = [
     role: UserRole.COMPANY_ADMIN,
     email: 'rafid.carriastic@gmail.com',
     phone: '+8801850700054',
+    title: 'Head of Talent Ops',
+    team: 'Talent Intelligence · carriX Labs',
+    timezone: 'GMT+6 · Dhaka',
+    profileStatus: 'Active',
+    startedAt: new Date('2024-01-10'),
     password: 'Carriastic4321*',
     companyId: '1',
   },
@@ -42,6 +57,11 @@ export const users: SeedUser[] = [
     role: UserRole.COMPANY_ADMIN,
     email: 'ethic.carriastic@gmail.com',
     phone: '+8801850700054',
+    title: 'Head of Product',
+    team: 'Product · carriX Labs',
+    timezone: 'GMT+6 · Dhaka',
+    profileStatus: 'Active',
+    startedAt: new Date('2024-02-20'),
     password: 'Carriastic4321*',
     companyId: '1',
   },
@@ -53,6 +73,11 @@ export const users: SeedUser[] = [
     role: UserRole.COMPANY_ADMIN,
     email: 'hasan.carriastic@gmail.com',
     phone: '+8801850700054',
+    title: 'Engineering Lead',
+    team: 'Platform · carriX Labs',
+    timezone: 'GMT+6 · Dhaka',
+    profileStatus: 'Active',
+    startedAt: new Date('2024-03-12'),
     password: 'Carriastic4321*',
     companyId: '1',
   },
@@ -64,6 +89,11 @@ export const users: SeedUser[] = [
     role: UserRole.COMPANY_MEMBER,
     email: 'carriastic.hr@gmail.com',
     phone: '+8801850700054',
+    title: 'Talent Ops',
+    team: 'Recruiting · carriX Labs',
+    timezone: 'GMT+6 · Dhaka',
+    profileStatus: 'Active',
+    startedAt: new Date('2024-05-05'),
     password: 'Carriastic54321*',
     companyId: '1',
   },
@@ -74,6 +104,11 @@ export const users: SeedUser[] = [
     role: UserRole.VIEWER,
     email: 'rafidulemon@gmail.com',
     phone: '+8801850700054',
+    title: 'Viewer',
+    team: 'Hiring Partner',
+    timezone: 'GMT+6 · Dhaka',
+    profileStatus: 'Active',
+    startedAt: new Date('2024-06-01'),
     password: 'Carriastic21*',
     companyId: '1',
   },
