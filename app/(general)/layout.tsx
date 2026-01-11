@@ -1,4 +1,4 @@
-import StickyHeader from "../components/navigations/StickyHeader";
+import Header from "../components/navigations/MainHeader";
 import Footer from "../components/navigations/Footer";
 
 export default function PublicLayout({
@@ -8,7 +8,7 @@ export default function PublicLayout({
 }>) {
   return (
     <>
-      <StickyHeader />
+      <Header />
       <div>{children}</div>
       <Footer />
     </>

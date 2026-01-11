@@ -122,8 +122,7 @@ export default function ProfilePage() {
               Profile
             </span>
             <div className="flex items-start gap-4">
-              <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-[#DCE0E0] bg-gradient-to-br from-[#3D64FF] to-[#f06292] text-xl font-semibold text-white shadow-[0_22px_40px_-28px_rgba(61,100,255,0.8)] lg:h-20 lg:w-20">
-                <span className="absolute inset-0 grid place-items-center text-white">{profileInitial}</span>
+              <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-[#DCE0E0] text-xl font-semibold text-white shadow-[0_22px_40px_-28px_rgba(61,100,255,0.8)] lg:h-20 lg:w-20">
                 <Image
                   src={profileAvatar}
                   alt={`${profile.name} avatar`}

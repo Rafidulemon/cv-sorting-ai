@@ -58,7 +58,7 @@ export default function FeaturesPage() {
   return (
     <div className="bg-white">
       {/* HERO */}
-      <section className="relative overflow-hidden bg-hero-base">
+      <section className="relative overflow-hidden bg-hero-base" id="features-hero">
         <div className="absolute inset-0 bg-[radial-gradient(1100px_600px_at_50%_15%,rgba(216,8,128,0.30),rgba(24,10,42,0.0)),linear-gradient(180deg,rgba(88,28,135,0.35),rgba(24,10,42,0.96))]" />
 
         {/* dotted pattern */}

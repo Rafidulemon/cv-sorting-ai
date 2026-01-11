@@ -1,10 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Button from "../buttons/Button";
+
+const HERO_SECTION_IDS: Record<string, string> = {
+  "/": "home-hero",
+  "/pricing": "pricing-hero",
+  "/features": "features-hero",
+};
 
 type HeaderProps = {
   isDark?: boolean;
@@ -44,15 +51,61 @@ const NavLink = ({
 const Header = ({ isDark = false }: HeaderProps) => {
   const pathname = usePathname();
   const { status } = useSession();
+  const [isHeroActive, setIsHeroActive] = useState(
+    !isDark && Boolean(HERO_SECTION_IDS[pathname])
+  );
+
+  useEffect(() => {
+    if (isDark) return;
+
+    const heroId = HERO_SECTION_IDS[pathname];
+    if (!heroId) {
+      setIsHeroActive(false);
+      return;
+    }
+
+    let observer: IntersectionObserver | null = null;
+    let cancelled = false;
+
+    const attachObserver = () => {
+      const heroSection = document.getElementById(heroId);
+      if (!heroSection) {
+        // Keep dark styling until the hero mounts to avoid flashes.
+        setIsHeroActive(true);
+        if (!cancelled) {
+          setTimeout(attachObserver, 80);
+        }
+        return;
+      }
+
+      setIsHeroActive(true);
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          setIsHeroActive(entry.isIntersecting);
+        },
+        { threshold: 0.4, rootMargin: "-80px 0px 0px 0px" }
+      );
+
+      observer.observe(heroSection);
+    };
+
+    attachObserver();
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+    };
+  }, [isDark, pathname]);
+
+  const isDarkHeader = isDark || isHeroActive;
   const isLoading = status === "loading";
   const isAuthenticated = status === "authenticated";
-  const headerClass = isDark
+  const headerClass = isDarkHeader
     ? "absolute top-0 left-0 w-full z-50 bg-transparent"
     : "fixed top-0 left-0 w-full z-50 border-b border-zinc-200/80 bg-white/90 backdrop-blur shadow-[0_12px_30px_rgba(24,24,27,0.08)]";
 
-  const titleClass = isDark ? "text-white" : "text-[#D80880]";
-  const taglineClass = isDark ? "text-white/60" : "text-zinc-500";
-  const loginClass = isDark
+  const titleClass = isDarkHeader ? "text-white" : "text-[#D80880]";
+  const taglineClass = isDarkHeader ? "text-white/60" : "text-zinc-500";
+  const loginClass = isDarkHeader
     ? "hidden md:inline-flex text-white/85 hover:text-white hover:bg-white/10 focus-visible:ring-white/40 focus-visible:ring-offset-0"
     : "hidden md:inline-flex text-zinc-700 hover:text-zinc-900";
   const signupClass = "hidden md:inline-flex";
@@ -63,7 +116,7 @@ const Header = ({ isDark = false }: HeaderProps) => {
         <Link href="/" className="flex items-center gap-1 transition-colors duration-300 cursor-pointer">
           <div>
             <Image
-              src={isDark ? "/logo/white_icon.png" : "/logo/icon.png"}
+              src={isDarkHeader ? "/logo/white_icon.png" : "/logo/icon.png"}
               alt="carriX logo"
               width={60}
               height={60}
@@ -85,37 +138,37 @@ const Header = ({ isDark = false }: HeaderProps) => {
           <NavLink
             label="Home"
             href="/"
-            isDark={isDark}
+            isDark={isDarkHeader}
             isActive={pathname === "/"}
           />
           <NavLink
             label="Pricing"
             href="/pricing"
-            isDark={isDark}
+            isDark={isDarkHeader}
             isActive={pathname.startsWith("/pricing")}
           />
           <NavLink
             label="About Us"
             href="/about"
-            isDark={isDark}
+            isDark={isDarkHeader}
             isActive={pathname.startsWith("/about")}
           />
           <NavLink
             label="Blog"
             href="/blog"
-            isDark={isDark}
+            isDark={isDarkHeader}
             isActive={pathname.startsWith("/blog")}
           />
           <NavLink
             label="FAQ"
             href="/faq"
-            isDark={isDark}
+            isDark={isDarkHeader}
             isActive={pathname.startsWith("/faq")}
           />
           <NavLink
             label="Contact Us"
             href="/contact"
-            isDark={isDark}
+            isDark={isDarkHeader}
             isActive={pathname.startsWith("/contact")}
           />
         </nav>
@@ -125,13 +178,13 @@ const Header = ({ isDark = false }: HeaderProps) => {
           <div className="flex items-center gap-3">
             <span
               className={`hidden h-10 w-24 rounded-full md:inline-flex ${
-                isDark ? "bg-white/15" : "bg-zinc-200/80"
+                isDarkHeader ? "bg-white/15" : "bg-zinc-200/80"
               } animate-pulse`}
               aria-hidden
             />
             <span
               className={`hidden h-10 w-28 rounded-full md:inline-flex ${
-                isDark ? "bg-white/15" : "bg-zinc-200/80"
+                isDarkHeader ? "bg-white/15" : "bg-zinc-200/80"
               } animate-pulse`}
               aria-hidden
             />

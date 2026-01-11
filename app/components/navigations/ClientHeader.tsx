@@ -26,7 +26,21 @@ export default function ClientHeader({
   const [credits, setCredits] = useState<CreditPayload | null>(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
   const defaultAvatar = "/images/default_dp.png";
-  const allowedAvatarHosts = useMemo(() => ["images.unsplash.com"], []);
+  const allowedAvatarHosts = useMemo(
+    () => [
+      "images.unsplash.com",
+      "lh3.googleusercontent.com",
+      "lh4.googleusercontent.com",
+      "lh5.googleusercontent.com",
+      "lh6.googleusercontent.com",
+      "avatars.githubusercontent.com",
+      "res.cloudinary.com",
+      "cv-sorting-ai.vercel.app",
+      "carrix.ai",
+      "localhost",
+    ],
+    []
+  );
   const [avatarSrc, setAvatarSrc] = useState(defaultAvatar);
 
   useEffect(() => {
@@ -75,9 +89,14 @@ export default function ClientHeader({
       setAvatarSrc(raw);
       return;
     }
+    const currentHost =
+      typeof window !== "undefined" ? window.location.hostname : null;
     try {
       const url = new URL(raw);
-      if (allowedAvatarHosts.includes(url.hostname)) {
+      if (
+        allowedAvatarHosts.includes(url.hostname) ||
+        (currentHost && url.hostname === currentHost)
+      ) {
         setAvatarSrc(raw);
         return;
       }
