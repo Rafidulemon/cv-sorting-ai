@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -13,6 +16,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Button from "@/app/components/buttons/Button";
+import ChangePasswordModal from "@/app/components/modals/ChangePasswordModal";
 
 type SettingItem = {
   title: string;
@@ -118,6 +123,8 @@ const dataControls: SettingItem[] = [
 ];
 
 export default function SettingsPage() {
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+
   return (
     <div className="space-y-8 text-[#1f2a44]">
       <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-gradient-to-r from-white via-[#fbf8ff] to-white p-6 shadow-card-soft backdrop-blur sm:p-8">
@@ -208,6 +215,21 @@ export default function SettingsPage() {
             >
               Manage team
             </Link>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-[#f0e8f7] bg-white/80 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#f5f7fb] text-primary-600">
+                <Lock className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#1f2a44]">Change password</p>
+                <p className="text-xs text-[#6b718b]">Update your login password to keep access secure.</p>
+              </div>
+            </div>
+            <Button size="sm" variant="secondary" onClick={() => setIsPasswordOpen(true)}>
+              Change password
+            </Button>
           </div>
 
           <div className="space-y-3">
@@ -421,6 +443,8 @@ export default function SettingsPage() {
           ))}
         </div>
       </section>
+
+      <ChangePasswordModal open={isPasswordOpen} onClose={() => setIsPasswordOpen(false)} />
     </div>
   );
 }

@@ -56,13 +56,21 @@ export default function LeftMenu({
   const role = (session as any)?.user?.role as string | undefined;
   const [companyName, setCompanyName] = useState<string | null>(null);
 
-  const navItems = useMemo(() => {
-    const items = [...baseNavItems];
-    if (role === "COMPANY_ADMIN") {
-      items.splice(5, 0, { label: "Company", href: "/company", icon: Building2 });
-    }
-    return items;
-  }, [role]);
+const navItems = useMemo(() => {
+  let items = baseNavItems.map((item) =>
+    item.href === "/credits" && role === "COMPANY_ADMIN"
+      ? { ...item, label: "Billing & Credits" }
+      : item
+  );
+
+  if (role === "COMPANY_ADMIN") {
+    items.splice(5, 0, { label: "Company", href: "/company", icon: Building2 });
+  } else {
+    items = items.filter((item) => item.href !== "/credits");
+  }
+
+  return items;
+}, [role]);
 
   const handleLogout = () => {
     setShowLogoutConfirm(true);

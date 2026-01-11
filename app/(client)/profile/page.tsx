@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Button from "@/app/components/buttons/Button";
+import ChangePasswordModal from "@/app/components/modals/ChangePasswordModal";
 import TextInput from "@/app/components/inputs/TextInput";
 import {
   Bell,
@@ -14,7 +15,7 @@ import {
   PencilLine,
   Phone,
   Sparkles,
-  UserRound,
+  Lock,
   X,
 } from "lucide-react";
 
@@ -39,6 +40,14 @@ type JobActivity = {
   cvSorted: number;
   analyzed: number;
   updated: string;
+};
+
+type ApiJobPayload = {
+  title?: string | null;
+  status?: string | null;
+  cvSortedCount?: number | null;
+  cvAnalyzedCount?: number | null;
+  lastActivityAt?: string | null;
 };
 
 const cvTrend = [14, 22, 19, 28, 25, 31, 27];
@@ -98,9 +107,11 @@ type EditProfileModalProps = {
   draft: Profile;
   onChange: (key: keyof Profile) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  isSaving: boolean;
+  error?: string;
 };
 
-function EditProfileModal({ open, onClose, draft, onChange, onSubmit }: EditProfileModalProps) {
+function EditProfileModal({ open, onClose, draft, onChange, onSubmit, isSaving, error }: EditProfileModalProps) {
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
@@ -170,11 +181,19 @@ function EditProfileModal({ open, onClose, draft, onChange, onSubmit }: EditProf
               />
             </div>
 
+            {error ? (
+              <div className="rounded-xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-700">
+                {error}
+              </div>
+            ) : null}
+
             <div className="flex justify-end gap-3">
-              <Button type="button" variant="secondary" onClick={onClose}>
+              <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
                 Cancel
               </Button>
-              <Button type="submit">Save profile</Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving…" : "Save profile"}
+              </Button>
             </div>
           </form>
         </div>
@@ -200,10 +219,13 @@ export default function ProfilePage() {
   }));
   const [draftProfile, setDraftProfile] = useState<Profile>(profile);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [jobs, setJobs] = useState<JobActivity[]>([]);
   const [jobStats, setJobStats] = useState({ jobsCreated: 0, liveJobs: 0, totalSorted: 0, totalAnalyzed: 0 });
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     setProfile((prev) => ({
@@ -217,77 +239,77 @@ export default function ProfilePage() {
     }));
   }, [session]);
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      setLoadingProfile(true);
-      setProfileError("");
-      try {
-        const response = await fetch("/api/profile", { cache: "no-store" });
-        const raw = await response.text();
-        const payload = raw ? JSON.parse(raw) : {};
-        if (!response.ok) {
-          const message = payload?.error ?? response.statusText ?? "Failed to load profile";
-          setProfileError(message);
-          setJobs([]);
-          setJobStats({ jobsCreated: 0, liveJobs: 0, totalSorted: 0, totalAnalyzed: 0 });
-          return;
-        }
-        const user = payload.user as Partial<Profile & { profileStatus?: string; startedAt?: string }>;
-        setProfile((prev) => ({
-          ...prev,
-          name: user.name ?? prev.name,
-          title: user.title ?? prev.title,
-          team: user.team ?? prev.team,
-          email: user.email ?? prev.email,
-          phone: user.phone ?? prev.phone,
-          timezone: user.timezone ?? prev.timezone,
-          status: user.profileStatus ?? prev.status,
-          startDate: user.startedAt ? formatDateLabel(user.startedAt) : prev.startDate,
-          image: user.image ?? prev.image,
-          lastActive: payload?.membership?.lastActiveAt ? `Active · ${formatDateLabel(payload.membership.lastActiveAt)}` : prev.lastActive,
-        }));
-
-        const apiJobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
-        setJobs(
-          apiJobs.map((job: any) => ({
-            title: job.title ?? "Untitled",
-            status: mapJobStatus(job.status),
-            cvSorted: Number(job.cvSortedCount) || 0,
-            analyzed: Number(job.cvAnalyzedCount) || 0,
-            updated: job.lastActivityAt ? `${formatDateLabel(job.lastActivityAt)}` : "Recently",
-          }))
-        );
-
-        if (payload?.stats) {
-          setJobStats({
-            jobsCreated: payload.stats.jobsCreated ?? apiJobs.length,
-            liveJobs: payload.stats.liveJobs ?? 0,
-            totalSorted: payload.stats.totalSorted ?? 0,
-            totalAnalyzed: payload.stats.totalAnalyzed ?? 0,
-          });
-        } else {
-          const totalSortedFromJobs = apiJobs.reduce((total: number, job: any) => total + (job.cvSortedCount ?? 0), 0);
-          const totalAnalyzedFromJobs = apiJobs.reduce((total: number, job: any) => total + (job.cvAnalyzedCount ?? 0), 0);
-          const liveJobsFromJobs = apiJobs.filter((job: any) => job.status === "ACTIVE").length;
-          setJobStats({
-            jobsCreated: apiJobs.length,
-            liveJobs: liveJobsFromJobs,
-            totalSorted: totalSortedFromJobs,
-            totalAnalyzed: totalAnalyzedFromJobs,
-          });
-        }
-      } catch (error) {
-        console.error(error);
-        setProfileError((error as Error)?.message ?? "Failed to load profile");
+  const fetchProfile = useCallback(async () => {
+    setLoadingProfile(true);
+    setProfileError("");
+    try {
+      const response = await fetch("/api/profile", { cache: "no-store" });
+      const raw = await response.text();
+      const payload = raw ? JSON.parse(raw) : {};
+      if (!response.ok) {
+        const message = payload?.error ?? response.statusText ?? "Failed to load profile";
+        setProfileError(message);
         setJobs([]);
         setJobStats({ jobsCreated: 0, liveJobs: 0, totalSorted: 0, totalAnalyzed: 0 });
-      } finally {
-        setLoadingProfile(false);
+        return;
       }
-    };
+      const user = payload.user as Partial<Profile & { profileStatus?: string; startedAt?: string }>;
+      setProfile((prev) => ({
+        ...prev,
+        name: user.name ?? prev.name,
+        title: user.title ?? prev.title,
+        team: user.team ?? prev.team,
+        email: user.email ?? prev.email,
+        phone: user.phone ?? prev.phone,
+        timezone: user.timezone ?? prev.timezone,
+        status: user.profileStatus ?? prev.status,
+        startDate: user.startedAt ? formatDateLabel(user.startedAt) : prev.startDate,
+        image: user.image ?? prev.image,
+        lastActive: payload?.membership?.lastActiveAt ? `Active · ${formatDateLabel(payload.membership.lastActiveAt)}` : prev.lastActive,
+      }));
 
-    loadProfile();
+      const apiJobs: ApiJobPayload[] = Array.isArray(payload?.jobs) ? payload.jobs : [];
+      setJobs(
+        apiJobs.map((job) => ({
+          title: job.title ?? "Untitled",
+          status: mapJobStatus(job.status),
+          cvSorted: Number(job.cvSortedCount) || 0,
+          analyzed: Number(job.cvAnalyzedCount) || 0,
+          updated: job.lastActivityAt ? `${formatDateLabel(job.lastActivityAt)}` : "Recently",
+        }))
+      );
+
+      if (payload?.stats) {
+        setJobStats({
+          jobsCreated: payload.stats.jobsCreated ?? apiJobs.length,
+          liveJobs: payload.stats.liveJobs ?? 0,
+          totalSorted: payload.stats.totalSorted ?? 0,
+          totalAnalyzed: payload.stats.totalAnalyzed ?? 0,
+        });
+      } else {
+        const totalSortedFromJobs = apiJobs.reduce((total, job) => total + (job.cvSortedCount ?? 0), 0);
+        const totalAnalyzedFromJobs = apiJobs.reduce((total, job) => total + (job.cvAnalyzedCount ?? 0), 0);
+        const liveJobsFromJobs = apiJobs.filter((job) => job.status === "ACTIVE").length;
+        setJobStats({
+          jobsCreated: apiJobs.length,
+          liveJobs: liveJobsFromJobs,
+          totalSorted: totalSortedFromJobs,
+          totalAnalyzed: totalAnalyzedFromJobs,
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      setProfileError((error as Error)?.message ?? "Failed to load profile");
+      setJobs([]);
+      setJobStats({ jobsCreated: 0, liveJobs: 0, totalSorted: 0, totalAnalyzed: 0 });
+    } finally {
+      setLoadingProfile(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const profileAvatar = profile.image?.trim().length ? profile.image : defaultAvatar;
 
@@ -304,21 +326,85 @@ export default function ProfilePage() {
   ];
 
   const openEditModal = () => {
+    setSaveError("");
     setDraftProfile(profile);
     setIsEditOpen(true);
   };
 
-  const closeEditModal = () => setIsEditOpen(false);
+  const openPasswordModal = () => setIsPasswordOpen(true);
+
+  const closeEditModal = () => {
+    setSaveError("");
+    setIsEditOpen(false);
+  };
+
+  const closePasswordModal = () => setIsPasswordOpen(false);
 
   const handleDraftChange =
     (key: keyof Profile) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setDraftProfile((prev) => ({ ...prev, [key]: event.target.value }));
     };
 
-  const handleProfileSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setProfile((prev) => ({ ...prev, ...draftProfile }));
-    setIsEditOpen(false);
+    setSaveError("");
+    setSavingProfile(true);
+
+    const payload = {
+      name: draftProfile.name.trim(),
+      title: draftProfile.title.trim(),
+      team: draftProfile.team.trim(),
+      phone: draftProfile.phone.trim(),
+      timezone: draftProfile.timezone.trim(),
+      image: draftProfile.image.trim(),
+    };
+
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const raw = await response.text();
+      const data = raw ? JSON.parse(raw) : {};
+      if (!response.ok) {
+        const message = data?.error ?? response.statusText ?? "Unable to save profile";
+        throw new Error(message);
+      }
+
+      const user = data.user as Partial<Profile & { profileStatus?: string; startedAt?: string }>;
+
+      setProfile((prev) => ({
+        ...prev,
+        name: user?.name ?? payload.name ?? prev.name,
+        title: user?.title ?? payload.title ?? prev.title,
+        team: user?.team ?? payload.team ?? prev.team,
+        email: user?.email ?? prev.email,
+        phone: user?.phone ?? payload.phone ?? prev.phone,
+        timezone: user?.timezone ?? payload.timezone ?? prev.timezone,
+        status: user?.profileStatus ?? prev.status,
+        startDate: user?.startedAt ? formatDateLabel(user.startedAt) : prev.startDate,
+        image: user?.image ?? payload.image ?? prev.image,
+      }));
+
+      setDraftProfile((prev) => ({
+        ...prev,
+        name: user?.name ?? payload.name ?? prev.name,
+        title: user?.title ?? payload.title ?? prev.title,
+        team: user?.team ?? payload.team ?? prev.team,
+        phone: user?.phone ?? payload.phone ?? prev.phone,
+        timezone: user?.timezone ?? payload.timezone ?? prev.timezone,
+        image: user?.image ?? payload.image ?? prev.image,
+      }));
+
+      setProfileError("");
+      setIsEditOpen(false);
+    } catch (error) {
+      console.error(error);
+      setSaveError((error as Error)?.message ?? "Unable to save profile");
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   return (
@@ -407,6 +493,21 @@ export default function ProfilePage() {
                 </div>
               );
             })}
+          </div>
+          <div className="flex flex-col gap-2 rounded-2xl border border-[#EEF2F7] bg-white px-4 py-3 shadow-card-soft md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#f5f7fb] text-primary-600">
+                <Lock className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8A94A6]">Security</p>
+                <p className="mt-1 text-sm font-semibold text-[#0f172a]">Change password</p>
+                <p className="text-xs text-[#6b7280]">Update your login password to keep your account protected.</p>
+              </div>
+            </div>
+            <Button size="sm" variant="secondary" onClick={openPasswordModal}>
+              Change password
+            </Button>
           </div>
           <div className="rounded-2xl border border-[#EEF2F7] bg-[#f8fafc] p-4 text-sm text-[#4b5563]">
             <div className="flex items-center gap-2 text-[#0f172a]">
@@ -530,7 +631,10 @@ export default function ProfilePage() {
         draft={draftProfile}
         onChange={handleDraftChange}
         onSubmit={handleProfileSubmit}
+        isSaving={savingProfile}
+        error={saveError}
       />
+      <ChangePasswordModal open={isPasswordOpen} onClose={closePasswordModal} />
     </div>
   );
 }

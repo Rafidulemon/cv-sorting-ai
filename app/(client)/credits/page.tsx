@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { useSession } from "next-auth/react";
+import {
+  ArrowRight,
+  CalendarClock,
+  CreditCard,
+  Loader2,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Wallet2,
+} from "lucide-react";
 import Link from "next/link";
 
 type Bundle = {
@@ -27,6 +38,10 @@ const bundles: Bundle[] = [
 ];
 
 export default function CreditsPage() {
+  const { data: session, status: sessionStatus } = useSession();
+  const role = (session as any)?.user?.role as string | undefined;
+  const isCompanyAdmin = role === "COMPANY_ADMIN";
+
   const [selectedBundleId, setSelectedBundleId] = useState<string>(bundles[1]?.id ?? bundles[0].id);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
@@ -76,6 +91,10 @@ export default function CreditsPage() {
     let isMounted = true;
 
     const loadBalance = async () => {
+      if (sessionStatus !== "authenticated" || !isCompanyAdmin) {
+        setBalanceLoading(false);
+        return;
+      }
       setBalanceLoading(true);
       setBalanceError("");
       try {
@@ -95,7 +114,41 @@ export default function CreditsPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isCompanyAdmin, sessionStatus]);
+
+  if (sessionStatus === "authenticated" && !isCompanyAdmin) {
+    return (
+      <div className="space-y-6 text-[#181B31]">
+        <section className="rounded-4xl border border-[#DCE0E0]/80 bg-white p-6 shadow-card-soft">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff4f8] text-[#D80880]">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-xl font-semibold text-[#181B31]">Admin access required</h1>
+              <p className="text-sm text-[#4B5563]">
+                Only company admins can view and manage billing & credits. Ask an admin to top up or grant you access.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:bg-[#3D64FF]/10"
+                >
+                  Back to dashboard
+                </Link>
+                <Link
+                  href="/contact"
+                  className="inline-flex items-center justify-center rounded-full border border-[#D80880]/20 bg-[#fff4f8] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#D80880] transition hover:border-[#D80880]/40"
+                >
+                  Contact support
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 text-[#181B31]">
@@ -104,61 +157,137 @@ export default function CreditsPage() {
           <div className="absolute -top-24 right-10 h-56 w-56 rounded-full bg-[#3D64FF]/15 blur-3xl" />
           <div className="absolute -bottom-16 left-12 h-48 w-48 rounded-full bg-[#3D64FF]/12 blur-3xl" />
         </div>
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-4">
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#3D64FF]/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-[#3D64FF]">
-              <Sparkles className="h-4 w-4 text-[#3D64FF]" />
-              Credits
-            </span>
-            <h1 className="text-3xl font-semibold leading-tight text-[#181B31] lg:text-4xl">
-              Top up credits to keep sorting
-            </h1>
-            <p className="max-w-2xl text-sm text-[#4B5563] md:text-base">
-              Choose a one-time boost or extend your allowance so CV analysis and sorting runs never pause mid-hire.
-            </p>
-            <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-[#4B5563]">
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-1.5 text-[#181B31]">
-                <ShieldCheck className="h-3.5 w-3.5 text-[#3D64FF]" />
-                Secure checkout
+        <div className="relative space-y-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-4">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#3D64FF]/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-[#3D64FF]">
+                <Sparkles className="h-4 w-4 text-[#3D64FF]" />
+                Billing & credits
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-1.5 text-[#181B31]">
-                <CreditCard className="h-3.5 w-3.5 text-[#3D64FF]" />
-                Invoices ready
-              </span>
+              <h1 className="text-3xl font-semibold leading-tight text-[#181B31] lg:text-4xl">
+                Keep hiring flows running
+              </h1>
+              <p className="max-w-2xl text-sm text-[#4B5563] md:text-base">
+                Company admins can top up credits, renew allowances, and keep CV analysis uninterrupted for every
+                workspace user.
+              </p>
+              <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-[#4B5563]">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-1.5 text-[#181B31]">
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#3D64FF]" />
+                  Secure checkout
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-1.5 text-[#181B31]">
+                  <CreditCard className="h-3.5 w-3.5 text-[#3D64FF]" />
+                  Invoices ready
+                </span>
+              </div>
+            </div>
+            <div className="grid gap-4 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 text-sm text-[#181B31] shadow-card-soft lg:w-80">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Remaining balance</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-3xl font-semibold text-[#181B31]">
+                  {balanceLoading ? "…" : balance?.remaining ?? "—"}
+                </p>
+                <p className="text-sm font-semibold text-[#8A94A6]">
+                  / {balanceLoading ? "…" : balance?.total ?? "—"} credits
+                </p>
+              </div>
+              <div
+                className={`h-2 w-full overflow-hidden rounded-full bg-[#E7E9F0] ${
+                  balanceLoading ? "animate-pulse" : ""
+                }`}
+              >
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#7c5dfa] via-[#9c6cf8] to-[#f06292]"
+                  style={{ width: `${balanceUsage}%` }}
+                />
+              </div>
+              <p className="text-xs text-[#8A94A6]">
+                {balanceLoading
+                  ? "Loading plan…"
+                  : balanceError ||
+                    (renewalDate
+                      ? `Renews on ${renewalDate} · ${balance?.plan ?? "Plan"}`
+                      : "Plan details unavailable")}
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={startCheckout}
+                  disabled={!selectedBundle || isSubmitting}
+                  className={`inline-flex items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                    selectedBundle && !isSubmitting
+                      ? "border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/20"
+                      : "border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]"
+                  }`}
+                >
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                  Buy credits
+                </button>
+                <Link
+                  href="/profile"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:bg-[#3D64FF]/10"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Renew plan
+                </Link>
+              </div>
             </div>
           </div>
-          <div className="grid gap-4 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 text-sm text-[#181B31] shadow-card-soft lg:w-80">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Current balance</p>
-            <div className="flex items-baseline gap-2">
-              <p className="text-3xl font-semibold text-[#181B31]">
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-3xl border border-[#DCE0E0] bg-white/90 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Usage</p>
+                  <p className="text-sm font-semibold text-[#181B31]">Credits remaining</p>
+                </div>
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#f0f5ff] text-[#3D64FF]">
+                  <Wallet2 className="h-5 w-5" />
+                </div>
+              </div>
+              <p className="mt-2 text-3xl font-semibold text-[#181B31]">
                 {balanceLoading ? "…" : balance?.remaining ?? "—"}
               </p>
-              <p className="text-sm font-semibold text-[#8A94A6]">
-                / {balanceLoading ? "…" : balance?.total ?? "—"} credits
+              <p className="text-xs text-[#8A94A6]">Shared across your workspace.</p>
+            </div>
+            <div className="rounded-3xl border border-[#DCE0E0] bg-white/90 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Renewal</p>
+                  <p className="text-sm font-semibold text-[#181B31]">Next cycle</p>
+                </div>
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff4f8] text-[#D80880]">
+                  <CalendarClock className="h-5 w-5" />
+                </div>
+              </div>
+              <p className="mt-2 text-xl font-semibold text-[#181B31]">
+                {renewalDate || (balanceLoading ? "…" : "Set renewal date")}
+              </p>
+              <p className="text-xs text-[#8A94A6]">
+                Renew early to avoid pauses on bulk screening runs.
               </p>
             </div>
-            <div
-              className={`h-2 w-full overflow-hidden rounded-full bg-[#E7E9F0] ${
-                balanceLoading ? "animate-pulse" : ""
-              }`}
-            >
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[#7c5dfa] via-[#9c6cf8] to-[#f06292]"
-                style={{ width: `${balanceUsage}%` }}
-              />
+            <div className="rounded-3xl border border-[#DCE0E0] bg-white/90 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Auto-refill</p>
+                  <p className="text-sm font-semibold text-[#181B31]">Top up when low</p>
+                </div>
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f9f3] text-[#16a34a]">
+                  <RefreshCw className="h-5 w-5" />
+                </div>
+              </div>
+              <p className="mt-2 text-xl font-semibold text-[#16a34a]">Ready</p>
+              <p className="text-xs text-[#8A94A6]">Set a threshold and auto-purchase bundles.</p>
+              <button
+                type="button"
+                className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:bg-[#3D64FF]/10"
+              >
+                Configure
+                <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
-            <p className="text-xs text-[#8A94A6]">
-              {balanceLoading
-                ? "Loading plan…"
-                : balanceError ||
-                  (renewalDate ? `Renewal on ${renewalDate} · ${balance?.plan ?? "Plan"}` : "Plan details unavailable")}
-            </p>
-            <Link
-              href="/profile"
-              className="inline-flex items-center justify-center rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:bg-[#3D64FF]/15"
-            >
-              Manage plan
-            </Link>
           </div>
         </div>
       </section>
