@@ -65,33 +65,41 @@ const Header = ({ isDark = false }: HeaderProps) => {
     }
 
     let observer: IntersectionObserver | null = null;
-    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const attachObserver = () => {
-      const heroSection = document.getElementById(heroId);
-      if (!heroSection) {
-        // Keep dark styling until the hero mounts to avoid flashes.
-        setIsHeroActive(true);
-        if (!cancelled) {
-          setTimeout(attachObserver, 80);
-        }
-        return;
-      }
-
-      setIsHeroActive(true);
-      observer = new IntersectionObserver(
-        ([entry]) => {
-          setIsHeroActive(entry.isIntersecting);
-        },
-        { threshold: 0.4, rootMargin: "-80px 0px 0px 0px" }
-      );
-
-      observer.observe(heroSection);
+    const updateVisibilityFromRect = (heroEl: HTMLElement) => {
+      const rect = heroEl.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || 0;
+      const topOffset = 96; // keep header dark until scrolled past its height
+      const isVisible =
+        rect.top < viewportHeight - topOffset && rect.bottom > topOffset;
+      setIsHeroActive(isVisible);
     };
 
-    attachObserver();
+    const attachObserver = (heroEl: HTMLElement) => {
+      updateVisibilityFromRect(heroEl);
+      observer = new IntersectionObserver(
+        ([entry]) => setIsHeroActive(entry.isIntersecting),
+        { threshold: 0.25, rootMargin: "-96px 0px 0px 0px" }
+      );
+      observer.observe(heroEl);
+    };
+
+    const findHero = () => {
+      const heroSection = document.getElementById(heroId);
+      if (!heroSection) {
+        setIsHeroActive(true);
+        retryTimer = setTimeout(findHero, 80);
+        return;
+      }
+      attachObserver(heroSection);
+    };
+
+    // Ensure dark header while the hero loads and while we search for the element.
+    setIsHeroActive(true);
+    findHero();
     return () => {
-      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       observer?.disconnect();
     };
   }, [isDark, pathname]);
