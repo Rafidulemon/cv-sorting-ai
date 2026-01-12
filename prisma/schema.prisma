@@ -70,6 +70,12 @@ enum EmploymentType {
   TEMPORARY
 }
 
+enum JobOptionCategory {
+  EXPERIENCE_LEVEL
+  EMPLOYMENT_TYPE
+  CURRENCY
+}
+
 enum ApplicationStatus {
   SUBMITTED
   REVIEW
@@ -345,6 +351,7 @@ model Job {
   status         JobStatus       @default(DRAFT)
   sortingState   SortingState    @default(NOT_STARTED)
   description    String?
+  previewHtml    String?
   requirements   Json?
   seniority      String?
   employmentType EmploymentType?
@@ -356,7 +363,7 @@ model Job {
   lastActivityAt DateTime?
   salaryMin      Int?
   salaryMax      Int?
-  currency       String?         @default("USD")
+  currency       String?         @default("BDT")
   publishedAt    DateTime?
   closesAt       DateTime?
   createdAt      DateTime        @default(now())
@@ -374,6 +381,19 @@ model Job {
 
   @@index([organizationId, status])
   @@index([organizationId, sortingState])
+}
+
+model JobOption {
+  id        String             @id @default(cuid())
+  category  JobOptionCategory
+  value     String
+  label     String?
+  sortOrder Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([category, sortOrder])
+  @@unique([category, value])
 }
 
 model JobEmbedding {

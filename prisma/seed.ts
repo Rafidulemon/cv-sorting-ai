@@ -16,6 +16,7 @@ import {
   creditUsageRows as creditUsageSeeds,
   freePlanNudge as freePlanNudgeSeed,
 } from './seeds/pricing';
+import { jobOptionSeeds } from './seeds/jobOptions';
 
 const prisma = new PrismaClient();
 
@@ -133,6 +134,29 @@ async function main() {
       banner: freePlanNudgeSeed.banner,
     },
   });
+
+  for (const category of jobOptionSeeds) {
+    for (const option of category.options) {
+      await prisma.jobOption.upsert({
+        where: {
+          category_value: {
+            category: category.category,
+            value: option.value,
+          },
+        },
+        update: {
+          label: option.label ?? option.value,
+          sortOrder: option.sortOrder ?? 0,
+        },
+        create: {
+          category: category.category,
+          value: option.value,
+          label: option.label ?? option.value,
+          sortOrder: option.sortOrder ?? 0,
+        },
+      });
+    }
+  }
 
   for (const user of users) {
     const passwordHash = await hashPassword(user.password);
