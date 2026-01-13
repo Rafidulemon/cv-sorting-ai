@@ -13,6 +13,7 @@ type AuthToken = {
 };
 const createJobSchema = z
   .object({
+    id: z.string().trim().optional(),
     title: z.string().trim().min(1, "Title is required"),
     description: z.string().trim().optional().or(z.literal("")),
     previewHtml: z.string().trim().optional().or(z.literal("")),
@@ -21,7 +22,7 @@ const createJobSchema = z
     skills: z.array(z.string().trim()).optional(),
     experienceLevel: z.string().trim().optional().or(z.literal("")),
     companyCulture: z.string().trim().optional().or(z.literal("")),
-    source: z.enum(["ai", "upload"]).optional(),
+    source: z.enum(["create", "upload"]).optional(),
     topCandidates: z.number().int().positive().max(500).optional(),
     driveLink: z.string().trim().url().optional().or(z.literal("")),
     uploadedDescriptionFile: z.string().trim().optional().or(z.literal("")),
@@ -224,6 +225,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const jobId = parsed.data.id?.trim() || null;
+    if (jobId) {
+      const existingJob = await prisma.job.findFirst({
+        where: { id: jobId, organizationId: context.organizationId },
+        select: { id: true },
+      });
+
+      if (!existingJob) {
+        return NextResponse.json({ error: "Job not found" }, { status: 404 });
+      }
+    }
+
     const previewHtml = resolvePreviewHtml(parsed.data);
     if (!previewHtml) {
       return NextResponse.json({ error: "Preview HTML is required" }, { status: 400 });
@@ -240,30 +253,40 @@ export async function POST(request: NextRequest) {
         ? (parsed.data.employmentType as EmploymentType)
         : undefined;
 
-    const job = await prisma.job.create({
-      data: {
-        organizationId: context.organizationId,
-        createdById: context.userId,
-        title: parsed.data.title.trim(),
-        description:
-          parsed.data.description?.trim() ||
-          parsed.data.previewText?.trim() ||
-          stripHtml(previewHtml) ||
-          null,
-        previewHtml,
-        requirements,
-        seniority: parsed.data.experienceLevel?.trim() || undefined,
-        tags: skills.length ? skills : undefined,
-        lastActivityAt: new Date(),
-        employmentType,
-        openings,
-        locations: locations.length ? locations : undefined,
-        salaryMin: salaryMin ?? undefined,
-        salaryMax: salaryMax ?? undefined,
-        currency: parsed.data.currency ?? "BDT",
-      },
-      select: jobSelect,
-    });
+    const data = {
+      title: parsed.data.title.trim(),
+      description:
+        parsed.data.description?.trim() ||
+        parsed.data.previewText?.trim() ||
+        stripHtml(previewHtml) ||
+        null,
+      previewHtml,
+      requirements,
+      seniority: parsed.data.experienceLevel?.trim() || undefined,
+      tags: skills.length ? skills : undefined,
+      lastActivityAt: new Date(),
+      employmentType,
+      openings,
+      locations: locations.length ? locations : undefined,
+      salaryMin: salaryMin ?? undefined,
+      salaryMax: salaryMax ?? undefined,
+      currency: parsed.data.currency ?? "BDT",
+    };
+
+    const job = jobId
+      ? await prisma.job.update({
+          where: { id: jobId },
+          data,
+          select: jobSelect,
+        })
+      : await prisma.job.create({
+          data: {
+            organizationId: context.organizationId,
+            createdById: context.userId,
+            ...data,
+          },
+          select: jobSelect,
+        });
 
     return NextResponse.json({ job });
   } catch (error) {

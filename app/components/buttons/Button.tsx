@@ -58,7 +58,7 @@ export default function Button({
         baseClasses,
         sizeClasses[size],
         variantClasses[variant],
-        fullWidth && "w-full",
+        fullWidth && "w-full cursor-pointer",
         className
       )}
       {...buttonProps}
