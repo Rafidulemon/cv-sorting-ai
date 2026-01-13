@@ -22,6 +22,13 @@ enum MembershipStatus {
   DISABLED
 }
 
+enum SignupStatus {
+  PENDING
+  EMAIL_SENT
+  COMPLETED
+  EXPIRED
+}
+
 enum PlanTier {
   FREEMIUM
   STANDARD
@@ -255,6 +262,24 @@ model Invitation {
   invitedBy    User?        @relation("InvitationInviter", fields: [invitedById], references: [id])
 
   @@index([organizationId, email])
+}
+
+model SignupRequest {
+  id            String        @id @default(cuid())
+  email         String
+  name          String
+  companyName   String
+  passwordHash  String
+  role          String?
+  teamSize      String?
+  planSlug      String?
+  billingEmail  String?
+  status        SignupStatus  @default(PENDING)
+  token         String        @unique
+  expiresAt     DateTime
+  completedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 model OrganizationSubscription {

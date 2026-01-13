@@ -489,6 +489,7 @@ export default function CompanyPage() {
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState("");
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState("");
   const [memberActionError, setMemberActionError] = useState("");
@@ -632,6 +633,8 @@ export default function CompanyPage() {
           };
           const membersPayload: MemberPayload[] = Array.isArray(payload?.members) ? payload.members : [];
           const ownerId = typeof payload?.ownerId === "string" ? payload.ownerId : null;
+          const pendingInvites =
+            typeof payload?.pendingInviteCount === "number" ? payload.pendingInviteCount : 0;
 
           const mapped = membersPayload.map((member, index) => ({
             id: member.id ?? `member-${index}`,
@@ -647,6 +650,7 @@ export default function CompanyPage() {
           }));
           setMembers(mapped);
           setOrgOwnerId(ownerId);
+          setPendingInviteCount(pendingInvites);
         }
       } catch (error) {
         console.error(error);
@@ -852,7 +856,7 @@ export default function CompanyPage() {
     setSaveError("");
   };
 
-  const seatsUsed = members.length;
+  const seatsUsed = members.length + pendingInviteCount;
   const seatLimit = planSnapshot.seatLimit ?? 0;
   const seatsRemaining = Math.max(seatLimit - seatsUsed, 0);
   const canInviteMore = seatLimit > 0 && seatsRemaining > 0;

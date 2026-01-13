@@ -17,6 +17,14 @@ type SelectedJob = {
   updated?: string;
 };
 
+type ApiJob = {
+  id: string;
+  title: string;
+  status?: string | null;
+  createdBy?: { id: string; name?: string | null; email?: string | null } | null;
+  updatedAt?: string | null;
+};
+
 export default function UploadCandidatesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,6 +54,8 @@ export default function UploadCandidatesPage() {
   } = useJobCreation();
 
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
+  const [apiJobs, setApiJobs] = useState<Record<string, ApiJob>>({});
+  const [isLoadingApiJobs, setIsLoadingApiJobs] = useState(false);
   const currentUserName = session?.user?.name?.trim() || 'You';
 
   useEffect(() => {
@@ -59,7 +69,34 @@ export default function UploadCandidatesPage() {
     hydrateFromQuery(sectionParam, jobIdParam, titleParam);
   }, [hydrateFromQuery, searchParams]);
 
+  useEffect(() => {
+    const fetchJobs = async () => {
+      setIsLoadingApiJobs(true);
+      try {
+        const response = await fetch('/api/jobs');
+        if (!response.ok) return;
+        const payload = await response.json();
+        const fetched = Array.isArray(payload?.jobs) ? (payload.jobs as ApiJob[]) : [];
+        setApiJobs(
+          fetched.reduce<Record<string, ApiJob>>((acc, job) => {
+            if (job.id) acc[job.id] = job;
+            return acc;
+          }, {})
+        );
+      } catch {
+        // ignore network errors for this ancillary load
+      } finally {
+        setIsLoadingApiJobs(false);
+      }
+    };
+
+    fetchJobs();
+  }, []);
+
   const selectedJob = useMemo<SelectedJob | null>(() => {
+    const apiJob = selectedJobId ? apiJobs[selectedJobId] : null;
+    const apiOwner = apiJob?.createdBy?.name || apiJob?.createdBy?.email || undefined;
+
     if (selectedJobId) {
       const known = jobDetails[selectedJobId] ?? jobs.find((job) => job.id === selectedJobId);
       if (known) {
@@ -67,8 +104,8 @@ export default function UploadCandidatesPage() {
           id: known.id,
           title: known.title,
           status: known.status,
-          owner: known.owner,
-          updated: known.updated,
+          owner: apiOwner ?? known.owner ?? undefined,
+          updated: apiJob?.updatedAt ?? known.updated,
         };
       }
     }
@@ -78,13 +115,13 @@ export default function UploadCandidatesPage() {
         id: jobId ?? null,
         title: aiForm.title.trim() || 'Untitled role',
         status: jobId ? 'Draft' : undefined,
-        owner: undefined,
+        owner: apiOwner ?? undefined,
         updated: 'Just now',
       };
     }
 
     return null;
-  }, [aiForm.title, jobId, selectedJobId]);
+  }, [aiForm.title, apiJobs, jobId, selectedJobId]);
 
   const handleSelectJob = (nextId: string) => {
     setSelectedJobId(nextId);
@@ -171,7 +208,7 @@ export default function UploadCandidatesPage() {
                   )}
                 </div>
                 <div className="text-xs text-[#8A94A6]">
-                  <p>Created by {selectedJob.owner ?? currentUserName}</p>
+                  <p>Created by {selectedJob.owner ?? 'Unknown creator'}</p>
                   <p>Updated {selectedJob.updated ?? 'Just now'}</p>
                 </div>
               </div>

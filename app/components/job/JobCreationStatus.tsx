@@ -20,11 +20,9 @@ export function JobCreationStatus() {
     uploadedFiles,
     topCandidates,
     costUsage,
-    toast,
-    setToast,
   } = useJobCreation();
 
-  if (!showConfirmation && !toast) {
+  if (!showConfirmation) {
     return null;
   }
 
@@ -182,32 +180,6 @@ export function JobCreationStatus() {
         </div>
       )}
 
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-[60] animate-slide-up rounded-2xl border px-4 py-3 text-sm text-white shadow-card-soft ${
-            toast.type === 'success'
-              ? 'border-success-300 bg-success-600'
-              : 'border-danger-300 bg-danger-600'
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {toast.type === 'success' ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-white" />
-            ) : (
-              <AlertTriangle className="mt-0.5 h-4 w-4 text-white" />
-            )}
-            <p className="leading-relaxed">{toast.message}</p>
-            <button
-              type="button"
-              onClick={() => setToast(null)}
-              className="ml-2 rounded-full bg-white/15 p-1 text-white transition hover:bg-white/25"
-              aria-label="Dismiss toast"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }

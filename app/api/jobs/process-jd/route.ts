@@ -43,6 +43,8 @@ const jobSelect: Prisma.JobSelect = {
   salaryMin: true,
   salaryMax: true,
   currency: true,
+  createdById: true,
+  createdBy: { select: { id: true, name: true, email: true } },
   lastActivityAt: true,
   createdAt: true,
   updatedAt: true,

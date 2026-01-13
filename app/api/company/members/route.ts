@@ -84,8 +84,17 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: "asc" },
   });
 
+  const pendingInvites = await prisma.invitation.count({
+    where: {
+      organizationId: membership.organizationId,
+      acceptedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+  });
+
   return NextResponse.json({
     ownerId: organization.ownerId,
+    pendingInviteCount: pendingInvites,
     members: members.map((member) => ({
       id: member.id,
       role: member.role,

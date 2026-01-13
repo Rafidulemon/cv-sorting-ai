@@ -292,6 +292,7 @@ export default function NewJobPage() {
                   type="button"
                   onClick={handleProceedToUploadPage}
                   disabled={!canProceedToUpload}
+                  data-proceed-to-upload
                   className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
                     canProceedToUpload
                       ? 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'

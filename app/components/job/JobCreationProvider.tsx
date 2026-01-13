@@ -89,8 +89,6 @@ function useJobCreationState() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftJobId, setDraftJobId] = useState<string | null>(null);
   const [draftError, setDraftError] = useState('');
-  const [toast, setToast] = useState<Toast>(null);
-  const toastTimer = useRef<NodeJS.Timeout | null>(null);
   const hasHydratedFromQuery = useRef(false);
 
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -149,21 +147,9 @@ function useJobCreationState() {
 
   const isUploadingJd = jdUploadState === 'uploading';
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    if (toastTimer.current) {
-      clearTimeout(toastTimer.current);
-    }
-    setToast({ message, type });
-    toastTimer.current = setTimeout(() => setToast(null), 4200);
+  const showToast = (_message: string, _type: 'success' | 'error') => {
+    return;
   };
-
-  useEffect(() => {
-    return () => {
-      if (toastTimer.current) {
-        clearTimeout(toastTimer.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -353,7 +339,9 @@ function useJobCreationState() {
     window.open(shareUrl, '_blank', 'noopener,noreferrer');
   };
 
-  const uploadJobDescription = async (file: File) => {
+  const uploadJobDescription = async (
+    file: File
+  ): Promise<{ success: boolean; error?: string; text?: string; jobId?: string | null }> => {
     setUploadedJdText('');
     setJdUploadError('');
     setJdSecurityNote('');
@@ -413,6 +401,7 @@ function useJobCreationState() {
       setJdVirusScanQueued(Boolean(preparePayload?.virusScanQueued));
       setJdUploadState('uploaded');
       showToast(`Uploaded ${file.name}`, 'success');
+      return { success: true, text: fileText, jobId: responseJobId ?? null };
     } catch (error) {
       const message = (error as Error)?.message ?? 'Failed to upload job description.';
       setJdUploadError(message);
@@ -423,6 +412,7 @@ function useJobCreationState() {
       setUploadedJdFileText('');
       setJdProcessingProgress(0);
       showToast(message, 'error');
+      return { success: false, error: message };
     }
   };
 
@@ -433,12 +423,21 @@ function useJobCreationState() {
     event.target.value = '';
   };
 
-  const processJobDescription = async () => {
-    if (jdProcessing) return;
-    const jdText = jdTextForProcessing.trim();
+  const processJobDescription = async (
+    textOverride?: string,
+    jobIdOverride?: string | null
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (jdProcessing) return { success: false, error: 'Processing is already running.' };
+    const jdText = (textOverride ?? jdTextForProcessing).trim();
     if (!jdText.length) {
-      setJdProcessingError('Upload or paste a job description before processing.');
-      return;
+      const message = 'Upload or paste a job description before processing.';
+      setJdProcessingError(message);
+      return { success: false, error: message };
+    }
+
+    const targetJobId = jobIdOverride ?? jobId ?? undefined;
+    if (jobIdOverride && jobIdOverride !== jobId) {
+      setJobId(jobIdOverride);
     }
 
     setJdProcessing(true);
@@ -450,7 +449,7 @@ function useJobCreationState() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          jobId: jobId ?? undefined,
+          jobId: targetJobId,
           text: jdText,
           source: uploadedJdText.trim() ? 'paste' : 'upload',
           fileName: uploadedJdFileName ?? undefined,
@@ -507,11 +506,13 @@ function useJobCreationState() {
 
       setJdProcessingProgress(100);
       showToast('Job description processed', 'success');
+      return { success: true };
     } catch (error) {
       const message = (error as Error)?.message ?? 'Failed to process job description';
       setJdProcessingError(message);
       setJdProcessingProgress(0);
       showToast(message, 'error');
+      return { success: false, error: message };
     } finally {
       setTimeout(() => {
         setJdProcessing(false);
@@ -774,8 +775,6 @@ function useJobCreationState() {
     savingDraft,
     draftJobId,
     draftError,
-    toast,
-    setToast,
     showConfirmation,
     setShowConfirmation,
     processingState,

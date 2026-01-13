@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, BarChart3, Users } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
+import { useState, useTransition, type ChangeEvent, type FormEvent, type ComponentType, type SVGProps } from "react";
+import { ArrowRight, BadgeCheck, BarChart3, CheckCircle2, CreditCard, Loader2, Mail, Users } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
 import EmailInput from "@/app/components/inputs/EmailInput";
 import PasswordInput from "@/app/components/inputs/PasswordInput";
@@ -30,6 +30,29 @@ const highlights: Highlight[] = [
     title: "Performance insights",
     description: "Live funnel analytics and pass-through rates in one view.",
     icon: BarChart3,
+  },
+];
+
+const flowSteps: Highlight[] = [
+  {
+    title: "Secure email confirmation",
+    description: "We send you a verification link to complete signup.",
+    icon: Mail,
+  },
+  {
+    title: "Choose your plan",
+    description: "Select Free, Standard, or Premium and review seats.",
+    icon: CreditCard,
+  },
+  {
+    title: "Invoice issued",
+    description: "Formal invoice emailed instantly. Payment not needed for Free.",
+    icon: BadgeCheck,
+  },
+  {
+    title: "Invite your team",
+    description: "Seat limits are enforced automatically per plan.",
+    icon: Users,
   },
 ];
 
@@ -62,14 +85,81 @@ function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
       variant="white"
       fullWidth
       leftIcon={<GoogleIcon />}
-      className="border-zinc-200 text-zinc-800 shadow-sm hover:border-zinc-300 hover:shadow"
+      className="border-zinc-200 text-zinc-400 shadow-none hover:border-zinc-200 hover:shadow-none"
+      disabled
     >
       {label}
     </Button>
   );
 }
 
+type FormState = {
+  name: string;
+  email: string;
+  password: string;
+  company: string;
+  role: string;
+  teamSize: string;
+  preferredPlan: string;
+};
+
 export default function SignUpPage() {
+  const [form, setForm] = useState<FormState>({
+    name: "",
+    email: "",
+    password: "",
+    company: "",
+    role: "",
+    teamSize: "",
+    preferredPlan: "standard",
+  });
+  const [submittedEmail, setSubmittedEmail] = useState("");
+  const [serverMessage, setServerMessage] = useState("");
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [sent, setSent] = useState(false);
+
+  const handleChange =
+    (key: keyof FormState) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const value = event.target.value;
+      setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setServerMessage("");
+    startTransition(async () => {
+      try {
+        const response = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name,
+            email: form.email,
+            password: form.password,
+            companyName: form.company,
+            role: form.role,
+            teamSize: form.teamSize,
+            preferredPlan: form.preferredPlan,
+          }),
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error ?? "Unable to start signup right now.");
+        }
+
+        setSent(true);
+        setSubmittedEmail(form.email);
+        setServerMessage(payload?.message ?? "Confirmation email sent.");
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Unable to start signup right now.");
+      }
+    });
+  };
+
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-white via-[#fef5ff] to-[#eef4ff]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_500px_at_10%_20%,rgba(216,8,128,0.08),transparent),radial-gradient(800px_420px_at_90%_12%,rgba(59,130,246,0.12),transparent)]" />
@@ -83,11 +173,10 @@ export default function SignUpPage() {
                 Create account
               </span>
               <h1 className="text-4xl font-extrabold leading-tight md:text-5xl">
-                Join carriX and launch faster hiring
+                Launch your carriX workspace with billing-ready signup
               </h1>
               <p className="max-w-xl text-sm text-white/80">
-                Set up a shared workspace for your team. Bring your ATS, define scoring
-                rubrics, and let AI shortlist the right candidates automatically.
+                Create a company owner account, confirm via email, choose a plan, and get an invoice instantly. Seat limits are enforced so you can invite teammates confidently.
               </p>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -128,13 +217,13 @@ export default function SignUpPage() {
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-600">
                     Get started
                   </div>
-                  <h2 className="mt-2 text-2xl font-bold text-zinc-900">Create your carriX account</h2>
+                  <h2 className="mt-2 text-2xl font-bold text-zinc-900">Create your carriX workspace</h2>
                   <p className="mt-1 text-sm text-zinc-600">
-                    Spin up a workspace and invite teammates in minutes.
+                    Submit owner details. We&apos;ll email a secure link to finalize plan, invoice, and payment.
                   </p>
                 </div>
                 <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700">
-                  Free trial
+                  Free plan available
                 </span>
               </div>
 
@@ -150,83 +239,145 @@ export default function SignUpPage() {
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
               </div>
 
-              <form
-                className="space-y-5"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                }}
-              >
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <TextInput
-                    label="Full name"
-                    name="name"
-                    placeholder="Your name"
-                    autoComplete="name"
+              {sent ? (
+                <div className="space-y-4 rounded-2xl border border-green-100 bg-green-50/70 p-4 text-sm text-green-900">
+                  <div className="flex items-start gap-3">
+                    <span className="rounded-full bg-white/60 p-2 text-green-600">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-green-800">
+                        Confirmation sent to {submittedEmail || "your email"}.
+                      </p>
+                      <p className="text-green-700">
+                        Follow the link in your inbox to select a plan, review the invoice, and confirm payment (skipped for Free). Seat limits will be applied automatically.
+                      </p>
+                    </div>
+                  </div>
+                  {serverMessage ? <p className="text-green-700">{serverMessage}</p> : null}
+                  <div className="rounded-xl border border-green-200 bg-white/90 p-3">
+                    <p className="text-xs font-semibold text-green-800 uppercase tracking-[0.18em]">Next steps</p>
+                    <ul className="mt-2 space-y-2 text-sm text-green-800">
+                      <li>1. Open the confirmation email and complete signup.</li>
+                      <li>2. Choose your plan and review the invoice.</li>
+                      <li>3. Invite team members within your seat limit.</li>
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <form className="space-y-5" onSubmit={handleSubmit}>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <TextInput
+                      label="Full name"
+                      name="name"
+                      placeholder="Your name"
+                      autoComplete="name"
+                      value={form.name}
+                      onChange={handleChange("name")}
+                      isRequired
+                    />
+                    <EmailInput
+                      label="Work email"
+                      name="email"
+                      placeholder="you@company.com"
+                      autoComplete="email"
+                      value={form.email}
+                      onChange={handleChange("email")}
+                      isRequired
+                    />
+                  </div>
+
+                  <PasswordInput
+                    label="Password"
+                    name="password"
+                    placeholder="Create a strong password"
+                    autoComplete="new-password"
+                    value={form.password}
+                    onChange={handleChange("password")}
                     isRequired
                   />
-                  <EmailInput
-                    label="Work email"
-                    name="email"
-                    placeholder="you@company.com"
-                    autoComplete="email"
-                    isRequired
-                  />
-                </div>
 
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <TextInput
-                    label="Company"
-                    name="company"
-                    placeholder="Acme Corp"
-                    autoComplete="organization"
-                    isRequired
-                  />
-                  <TextInput
-                    label="Role"
-                    name="role"
-                    placeholder="Head of Talent"
-                    autoComplete="organization-title"
-                  />
-                </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <TextInput
+                      label="Company"
+                      name="company"
+                      placeholder="Acme Corp"
+                      autoComplete="organization"
+                      value={form.company}
+                      onChange={handleChange("company")}
+                      isRequired
+                    />
+                    <TextInput
+                      label="Role"
+                      name="role"
+                      placeholder="Head of Talent"
+                      autoComplete="organization-title"
+                      value={form.role}
+                      onChange={handleChange("role")}
+                    />
+                  </div>
 
-                <SelectBox
-                  label="Team size"
-                  name="teamSize"
-                  placeholder="Select team size"
-                  options={[
-                    { value: "1-10", label: "1 - 10 people" },
-                    { value: "11-50", label: "11 - 50 people" },
-                    { value: "51-200", label: "51 - 200 people" },
-                    { value: "200+", label: "200+ people" },
-                  ]}
-                />
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <SelectBox
+                      label="Team size"
+                      name="teamSize"
+                      placeholder="Select team size"
+                      value={form.teamSize}
+                      onChange={handleChange("teamSize")}
+                      options={[
+                        { value: "1-10", label: "1 - 10 people" },
+                        { value: "11-50", label: "11 - 50 people" },
+                        { value: "51-200", label: "51 - 200 people" },
+                        { value: "200+", label: "200+ people" },
+                      ]}
+                    />
+                    <SelectBox
+                      label="Preferred plan"
+                      name="preferredPlan"
+                      value={form.preferredPlan}
+                      onChange={handleChange("preferredPlan")}
+                      options={[
+                        { value: "free", label: "Free · 1 seat · BDT 0" },
+                        { value: "standard", label: "Standard · 5 seats · BDT 7,500" },
+                        { value: "premium", label: "Premium · 10 seats · BDT 15,000" },
+                      ]}
+                    />
+                  </div>
 
-                <PasswordInput
-                  label="Password"
-                  name="password"
-                  placeholder="Create a strong password"
-                  autoComplete="new-password"
-                  isRequired
-                />
+                  {error ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      {error}
+                    </div>
+                  ) : null}
 
-                <div className="flex items-center gap-2 text-sm text-zinc-700">
-                  <input
-                    type="checkbox"
-                    name="updates"
-                    className="h-4 w-4 rounded border-zinc-300 text-primary-500 focus:ring-2 focus:ring-primary-200"
-                  />
-                  <span>Send me product updates and hiring best practices.</span>
-                </div>
+                  <Button
+                    type="submit"
+                    fullWidth
+                    rightIcon={isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                    disabled={isPending}
+                  >
+                    {isPending ? "Sending confirmation…" : "Send confirmation email"}
+                  </Button>
+                </form>
+              )}
 
-                <Button type="submit" fullWidth rightIcon={<ArrowRight className="h-4 w-4" />}>
-                  Create account
-                </Button>
-              </form>
+              <div className="mt-8 grid gap-3 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4">
+                {flowSteps.map(({ title, description, icon: Icon }) => (
+                  <div key={title} className="flex items-start gap-3 text-sm">
+                    <span className="mt-0.5 rounded-full bg-white p-2 text-primary-600 shadow-sm">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-zinc-900">{title}</p>
+                      <p className="text-zinc-600">{description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               <div className="mt-6 space-y-3 text-center text-sm text-zinc-600">
                 <p>
-                  By creating an account, you agree to our platform guidelines and data handling
-                  practices.
+                  By creating an account, you agree to our platform guidelines and data handling practices.
                 </p>
                 <p>
                   Already have an account?{" "}
