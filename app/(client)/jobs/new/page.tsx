@@ -55,10 +55,15 @@ export default function NewJobPage() {
     titleReady,
     jdUploadError,
     jdVirusScanQueued,
+    jdProcessing,
+    jdProcessingProgress,
+    jdProcessingError,
+    canProcessJd,
     isUploadingJd,
     uploadJobDescription,
     uploadedJdText,
     handleJdTextChange,
+    processJobDescription,
     previewText,
     jobId,
     hydrateFromQuery,
@@ -252,9 +257,14 @@ export default function NewJobPage() {
                 jdUploadError={jdUploadError}
                 uploadedJdFileName={uploadedJdFileName}
                 jdVirusScanQueued={jdVirusScanQueued}
+                jdProcessing={jdProcessing}
+                jdProcessingProgress={jdProcessingProgress}
+                jdProcessingError={jdProcessingError}
+                canProcessJd={canProcessJd}
                 uploadedJdText={uploadedJdText}
                 onJdTextChange={handleJdTextChange}
                 onUploadSelectedFile={uploadJobDescription}
+                onProcessJd={processJobDescription}
               />
             )}
           </div>

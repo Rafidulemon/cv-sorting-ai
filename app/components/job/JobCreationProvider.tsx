@@ -61,11 +61,15 @@ function useJobCreationState() {
   const [uploadedJdFileUrl, setUploadedJdFileUrl] = useState<string | null>(null);
   const [uploadedJdFileKey, setUploadedJdFileKey] = useState<string | null>(null);
   const [uploadedJdText, setUploadedJdText] = useState('');
+  const [uploadedJdFileText, setUploadedJdFileText] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
   const [jdUploadState, setJdUploadState] = useState<'idle' | 'uploading' | 'uploaded'>('idle');
   const [jdUploadError, setJdUploadError] = useState('');
   const [jdSecurityNote, setJdSecurityNote] = useState('');
   const [jdVirusScanQueued, setJdVirusScanQueued] = useState(false);
+  const [jdProcessing, setJdProcessing] = useState(false);
+  const [jdProcessingProgress, setJdProcessingProgress] = useState(0);
+  const [jdProcessingError, setJdProcessingError] = useState('');
 
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [zipFileName, setZipFileName] = useState<string | null>(null);
@@ -130,10 +134,14 @@ function useJobCreationState() {
     setJdUploadError('');
     setJdSecurityNote('');
     setJdVirusScanQueued(false);
+    setUploadedJdFileText('');
+    setJdProcessingError('');
+    setJdProcessingProgress(0);
   };
 
   const handleJdTextChange = (value: string) => {
     setUploadedJdText(value);
+    setJdProcessingError('');
     if (value.trim()) {
       resetUploadedFile();
     }
@@ -208,6 +216,17 @@ function useJobCreationState() {
 
     return '';
   }, [driveLink, generatedJD, mode, uploadedJdFileName, uploadedJdText]);
+
+  const jdTextForProcessing = useMemo(() => {
+    const pasted = uploadedJdText.trim();
+    if (pasted) return pasted;
+    return uploadedJdFileText.trim();
+  }, [uploadedJdFileText, uploadedJdText]);
+
+  const canProcessJd = useMemo(
+    () => Boolean(jdTextForProcessing.length) && !jdProcessing && !isUploadingJd,
+    [isUploadingJd, jdProcessing, jdTextForProcessing]
+  );
 
   const titleReady = jobPromptSchemas.title.safeParse(aiForm.title).success;
 
@@ -343,6 +362,9 @@ function useJobCreationState() {
     setUploadedJdFileName(null);
     setUploadedJdFileUrl(null);
     setUploadedJdFileKey(null);
+    setUploadedJdFileText('');
+    setJdProcessingError('');
+    setJdProcessingProgress(0);
 
     try {
       const jobTitle = aiForm.title.trim();
@@ -350,6 +372,9 @@ function useJobCreationState() {
       if (file.size > JOB_DESCRIPTION_MAX_BYTES) {
         throw new Error('Job description must be 5MB or smaller.');
       }
+
+      const fileText = (await file.text()).slice(0, 12000);
+      setUploadedJdFileText(fileText);
 
       const formData = new FormData();
       formData.append('file', file);
@@ -395,6 +420,8 @@ function useJobCreationState() {
       setUploadedJdFileName(null);
       setUploadedJdFileUrl(null);
       setUploadedJdFileKey(null);
+      setUploadedJdFileText('');
+      setJdProcessingProgress(0);
       showToast(message, 'error');
     }
   };
@@ -404,6 +431,93 @@ function useJobCreationState() {
     if (!file) return;
     void uploadJobDescription(file);
     event.target.value = '';
+  };
+
+  const processJobDescription = async () => {
+    if (jdProcessing) return;
+    const jdText = jdTextForProcessing.trim();
+    if (!jdText.length) {
+      setJdProcessingError('Upload or paste a job description before processing.');
+      return;
+    }
+
+    setJdProcessing(true);
+    setJdProcessingError('');
+    setJdProcessingProgress(15);
+
+    try {
+      const response = await fetch('/api/jobs/process-jd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId: jobId ?? undefined,
+          text: jdText,
+          source: uploadedJdText.trim() ? 'paste' : 'upload',
+          fileName: uploadedJdFileName ?? undefined,
+          uploadedDescriptionFile: uploadedJdFileKey ?? uploadedJdFileUrl ?? uploadedJdFileName ?? undefined,
+        }),
+      });
+
+      setJdProcessingProgress(55);
+
+      const raw = await response.text();
+      const payload = raw ? JSON.parse(raw) : {};
+
+      if (!response.ok) {
+        const message = payload?.error ?? 'Failed to process job description';
+        throw new Error(message);
+      }
+
+      const structured = (payload?.structured ?? {}) as {
+        title?: string;
+        summary?: string;
+        responsibilities?: string[];
+        skills?: string[];
+        seniority?: string;
+      };
+      const jobPayload = payload?.job as { id?: string; description?: string } | undefined;
+
+      if (jobPayload?.id) {
+        setJobId(jobPayload.id);
+      }
+
+      if (structured.title?.trim()) {
+        setAiForm((prev) => ({ ...prev, title: structured.title?.trim() || prev.title }));
+      }
+      const structuredResponsibilities = Array.isArray(structured.responsibilities) ? structured.responsibilities : [];
+      if (structuredResponsibilities.length) {
+        setAiForm((prev) => ({ ...prev, responsibilities: structuredResponsibilities.join('\n') }));
+      }
+      const structuredSkills = Array.isArray(structured.skills) ? structured.skills : [];
+      if (structuredSkills.length) {
+        setAiForm((prev) => ({ ...prev, skills: structuredSkills.join('\n') }));
+      }
+      if (structured.seniority?.trim()) {
+        setAiForm((prev) => ({ ...prev, experienceLevel: structured.seniority?.trim() || prev.experienceLevel }));
+      }
+      if (structured.summary?.trim()) {
+        const cleanSummary = structured.summary.trim();
+        setGeneratedJD(cleanSummary);
+        if (uploadedJdText.trim()) {
+          setUploadedJdText(cleanSummary);
+        }
+      } else if (jobPayload?.description) {
+        setGeneratedJD(jobPayload.description);
+      }
+
+      setJdProcessingProgress(100);
+      showToast('Job description processed', 'success');
+    } catch (error) {
+      const message = (error as Error)?.message ?? 'Failed to process job description';
+      setJdProcessingError(message);
+      setJdProcessingProgress(0);
+      showToast(message, 'error');
+    } finally {
+      setTimeout(() => {
+        setJdProcessing(false);
+        setJdProcessingProgress(0);
+      }, 350);
+    }
   };
 
   const handleUploadFiles = (event: ChangeEvent<HTMLInputElement>) => {
@@ -632,6 +746,10 @@ function useJobCreationState() {
     jdUploadError,
     jdSecurityNote,
     jdVirusScanQueued,
+    jdProcessing,
+    jdProcessingProgress,
+    jdProcessingError,
+    canProcessJd,
     uploadedFiles,
     zipFileName,
     driveLink,
@@ -694,6 +812,7 @@ function useJobCreationState() {
     handleShareLinkedIn,
     uploadJobDescription,
     handleJobDescriptionUpload,
+    processJobDescription,
     handleUploadFiles,
     handleZipUpload,
     handleRemoveFile,

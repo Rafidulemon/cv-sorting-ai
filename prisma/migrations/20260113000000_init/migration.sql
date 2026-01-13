@@ -26,6 +26,9 @@ CREATE TYPE "SortingState" AS ENUM ('NOT_STARTED', 'PROCESSING', 'COMPLETED');
 CREATE TYPE "EmploymentType" AS ENUM ('FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY');
 
 -- CreateEnum
+CREATE TYPE "JobOptionCategory" AS ENUM ('EXPERIENCE_LEVEL', 'EMPLOYMENT_TYPE', 'CURRENCY');
+
+-- CreateEnum
 CREATE TYPE "ApplicationStatus" AS ENUM ('SUBMITTED', 'REVIEW', 'SHORTLIST', 'HOLD', 'REJECTED', 'HIRED');
 
 -- CreateEnum
@@ -61,6 +64,11 @@ CREATE TABLE "User" (
     "image" TEXT,
     "lastLoginAt" TIMESTAMP(3),
     "phone" TEXT,
+    "title" TEXT,
+    "team" TEXT,
+    "timezone" TEXT,
+    "profileStatus" TEXT,
+    "startedAt" TIMESTAMP(3),
     "passwordHash" TEXT,
     "defaultOrgId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -179,7 +187,7 @@ CREATE TABLE "PricingPlan" (
     "monthlyCredits" INTEGER NOT NULL,
     "approxCvs" TEXT NOT NULL,
     "activeJobs" TEXT NOT NULL,
-    "team" TEXT NOT NULL,
+    "team" INTEGER NOT NULL,
     "support" TEXT NOT NULL,
     "apiAccess" BOOLEAN NOT NULL DEFAULT false,
     "askAi" BOOLEAN NOT NULL DEFAULT false,
@@ -224,21 +232,38 @@ CREATE TABLE "Job" (
     "status" "JobStatus" NOT NULL DEFAULT 'DRAFT',
     "sortingState" "SortingState" NOT NULL DEFAULT 'NOT_STARTED',
     "description" TEXT,
+    "previewHtml" TEXT,
     "requirements" JSONB,
     "seniority" TEXT,
     "employmentType" "EmploymentType",
     "locations" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "openings" INTEGER NOT NULL DEFAULT 1,
+    "cvSortedCount" INTEGER NOT NULL DEFAULT 0,
+    "cvAnalyzedCount" INTEGER NOT NULL DEFAULT 0,
+    "lastActivityAt" TIMESTAMP(3),
     "salaryMin" INTEGER,
     "salaryMax" INTEGER,
-    "currency" TEXT DEFAULT 'USD',
+    "currency" TEXT DEFAULT 'BDT',
     "publishedAt" TIMESTAMP(3),
     "closesAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Job_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "JobOption" (
+    "id" TEXT NOT NULL,
+    "category" "JobOptionCategory" NOT NULL,
+    "value" TEXT NOT NULL,
+    "label" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "JobOption_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -533,6 +558,12 @@ CREATE INDEX "Job_organizationId_status_idx" ON "Job"("organizationId", "status"
 
 -- CreateIndex
 CREATE INDEX "Job_organizationId_sortingState_idx" ON "Job"("organizationId", "sortingState");
+
+-- CreateIndex
+CREATE INDEX "JobOption_category_sortOrder_idx" ON "JobOption"("category", "sortOrder");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "JobOption_category_value_key" ON "JobOption"("category", "value");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "JobEmbedding_jobId_key" ON "JobEmbedding"("jobId");
