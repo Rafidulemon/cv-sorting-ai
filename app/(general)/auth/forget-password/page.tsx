@@ -1,11 +1,58 @@
 "use client";
 
 import Link from "next/link";
+import { useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
 import EmailInput from "@/app/components/inputs/EmailInput";
 
 export default function ForgetPasswordPage() {
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState("");
+  const [isPending, setIsPending] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setEmailError("");
+    setSent(false);
+
+    if (!email.trim().length) {
+      setEmailError("Email is required.");
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const raw = await response.text();
+      const data = raw ? JSON.parse(raw) : {};
+
+      if (!response.ok) {
+        const fieldError = data?.details?.fieldErrors?.email?.[0];
+        if (fieldError) {
+          setEmailError(fieldError);
+        }
+        const message = data?.error ?? response.statusText ?? "Unable to send reset link right now.";
+        throw new Error(message);
+      }
+
+      setSubmittedEmail(email.trim());
+      setSent(true);
+    } catch (submitError) {
+      setError((submitError as Error)?.message ?? "Unable to send reset link right now.");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-white via-[#fdf4ff] to-[#eef4ff]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_500px_at_10%_20%,rgba(216,8,128,0.08),transparent),radial-gradient(700px_400px_at_90%_10%,rgba(59,130,246,0.12),transparent)]" />
@@ -78,20 +125,35 @@ export default function ForgetPasswordPage() {
 
               <form
                 className="mt-8 space-y-6"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                }}
+                onSubmit={handleSubmit}
               >
                 <EmailInput
                   label="Work email"
                   name="email"
                   placeholder="you@company.com"
                   autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   isRequired
+                  error={emailError || undefined}
                 />
 
-                <Button type="submit" fullWidth rightIcon={<ArrowRight className="h-4 w-4" />}>
-                  Send reset link
+                {error ? (
+                  <div className="rounded-xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-700">
+                    {error}
+                  </div>
+                ) : null}
+                {sent ? (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    <p className="font-semibold">Check your email</p>
+                    <p className="text-xs text-emerald-700">
+                      If an account exists for {submittedEmail || "this address"}, you&apos;ll receive a secure reset link shortly.
+                    </p>
+                  </div>
+                ) : null}
+
+                <Button type="submit" fullWidth rightIcon={<ArrowRight className="h-4 w-4" />} disabled={isPending}>
+                  {isPending ? "Sending..." : "Send reset link"}
                 </Button>
               </form>
 

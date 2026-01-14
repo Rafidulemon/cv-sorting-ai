@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
@@ -11,39 +11,46 @@ import {
   ChevronRight,
   Filter,
   LineChart,
+  Plus,
   Sparkles,
   Users2,
-} from 'lucide-react';
-import { Pagination } from '@/app/components/Pagination';
-import type { JobSummary, SortingState } from './data';
-import { jobs as jobSummaries } from './data';
+} from "lucide-react";
+import { Pagination } from "@/app/components/Pagination";
+import type { JobSummary, SortingState } from "./data";
+import { jobs as jobSummaries } from "./data";
 
 const jobVelocity = [
-  { label: 'Mon', value: 6 },
-  { label: 'Tue', value: 9 },
-  { label: 'Wed', value: 5 },
-  { label: 'Thu', value: 11 },
-  { label: 'Fri', value: 7 },
+  { label: "Mon", value: 6 },
+  { label: "Tue", value: 9 },
+  { label: "Wed", value: 5 },
+  { label: "Thu", value: 11 },
+  { label: "Fri", value: 7 },
 ];
 
 const stageDistribution = [
-  { label: 'Screening', count: 24 },
-  { label: 'Interview', count: 14 },
-  { label: 'Offer', count: 6 },
-  { label: 'Hired', count: 3 },
+  { label: "Screening", count: 24 },
+  { label: "Interview", count: 14 },
+  { label: "Offer", count: 6 },
+  { label: "Hired", count: 3 },
 ];
 
 const statusStyles: Record<string, string> = {
-  Active: 'bg-[#E8F2FF] text-[#1C64F2]',
-  Draft: 'bg-[#FFF5E5] text-[#A26B00]',
-  Reviewing: 'bg-[#E9E5FF] text-[#5B32D2]',
-  Completed: 'bg-[#E6F4EA] text-[#1B806A]',
+  Active: "bg-[#E8F2FF] text-[#1C64F2]",
+  Draft: "bg-[#FFF5E5] text-[#A26B00]",
+  Reviewing: "bg-[#E9E5FF] text-[#5B32D2]",
+  Completed: "bg-[#E6F4EA] text-[#1B806A]",
 };
 
-const sortingStyles: Record<SortingState, { label: string; className: string }> = {
-  not_started: { label: 'Needs sorting', className: 'bg-[#FFF5E5] text-[#9A5B00]' },
-  processing: { label: 'Processing', className: 'bg-[#FEF3C7] text-[#92400E]' },
-  completed: { label: 'Sorted', className: 'bg-[#E6F4EA] text-[#1B806A]' },
+const sortingStyles: Record<
+  SortingState,
+  { label: string; className: string }
+> = {
+  not_started: {
+    label: "Needs sorting",
+    className: "bg-[#FFF5E5] text-[#9A5B00]",
+  },
+  processing: { label: "Processing", className: "bg-[#FEF3C7] text-[#92400E]" },
+  completed: { label: "Sorted", className: "bg-[#E6F4EA] text-[#1B806A]" },
 };
 
 const maxVelocity = Math.max(...jobVelocity.map((item) => item.value));
@@ -53,46 +60,59 @@ const linePoints = jobVelocity
     const y = 100 - (item.value / maxVelocity) * 100;
     return `${x},${y}`;
   })
-  .join(' ');
+  .join(" ");
 
-const sortingFilterOptions: Array<{ value: 'all' | SortingState; label: string }> = [
-  { value: 'all', label: 'All sorting states' },
-  { value: 'not_started', label: 'Needs sorting' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'completed', label: 'Sorted' },
+const sortingFilterOptions: Array<{
+  value: "all" | SortingState;
+  label: string;
+}> = [
+  { value: "all", label: "All sorting states" },
+  { value: "not_started", label: "Needs sorting" },
+  { value: "processing", label: "Processing" },
+  { value: "completed", label: "Sorted" },
 ];
 
-const statusFilterOptions: Array<{ value: 'all' | JobSummary['status']; label: string }> = [
-  { value: 'all', label: 'All statuses' },
-  { value: 'Active', label: 'Active' },
-  { value: 'Reviewing', label: 'Reviewing' },
-  { value: 'Draft', label: 'Draft' },
-  { value: 'Completed', label: 'Completed' },
+const statusFilterOptions: Array<{
+  value: "all" | JobSummary["status"];
+  label: string;
+}> = [
+  { value: "all", label: "All statuses" },
+  { value: "Active", label: "Active" },
+  { value: "Reviewing", label: "Reviewing" },
+  { value: "Draft", label: "Draft" },
+  { value: "Completed", label: "Completed" },
 ];
 
 export default function JobsPage() {
-  const [sortingFilter, setSortingFilter] = useState<'all' | SortingState>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | JobSummary['status']>('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [sortingFilter, setSortingFilter] = useState<"all" | SortingState>(
+    "all"
+  );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | JobSummary["status"]
+  >("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [jobsPage, setJobsPage] = useState(1);
   const jobsPageSize = 5;
 
   const filteredJobs = useMemo(() => {
     const matchesFilters = (job: JobSummary) => {
       const matchesSorting =
-        sortingFilter === 'all'
+        sortingFilter === "all"
           ? true
-          : sortingFilter === 'processing'
-            ? job.sortingState === 'processing'
-            : sortingFilter === 'completed'
-              ? job.sortingState === 'completed'
-              : job.sortingState === 'not_started';
+          : sortingFilter === "processing"
+          ? job.sortingState === "processing"
+          : sortingFilter === "completed"
+          ? job.sortingState === "completed"
+          : job.sortingState === "not_started";
 
-      const matchesStatus = statusFilter === 'all' ? true : job.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" ? true : job.status === statusFilter;
       const matchesSearch =
         searchTerm.trim().length === 0
           ? true
-          : `${job.title} ${job.owner}`.toLowerCase().includes(searchTerm.toLowerCase());
+          : `${job.title} ${job.owner}`
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase());
 
       return matchesSorting && matchesStatus && matchesSearch;
     };
@@ -116,18 +136,21 @@ export default function JobsPage() {
     <div className="space-y-10 text-[#181B31]">
       <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#E5E7EB] bg-white px-6 py-5 shadow-card-soft">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">Pipeline</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">
+            Pipeline
+          </p>
           <h1 className="mt-1 text-2xl font-semibold">Jobs</h1>
           <p className="text-sm text-[#4B5563]">
-            Track every opening, monitor performance, and jump back into your drafts.
+            Track every opening, monitor performance, and jump back into your
+            drafts.
           </p>
         </div>
         <Link
           href="/jobs/new"
-          className="inline-flex items-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
+          className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]"
         >
-          <Sparkles className="h-4 w-4" />
-          Create new job
+          <Plus className="h-4 w-4" />
+          Create New Job
         </Link>
       </header>
 
@@ -137,16 +160,28 @@ export default function JobsPage() {
             <div className="flex items-center gap-3">
               <LineChart className="h-5 w-5 text-[#3D64FF]" />
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">New jobs this week</p>
-                <h2 className="text-lg font-semibold text-[#181B31]">Velocity</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">
+                  New jobs this week
+                </p>
+                <h2 className="text-lg font-semibold text-[#181B31]">
+                  Velocity
+                </h2>
               </div>
             </div>
-            <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#3D64FF]">Live</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#3D64FF]">
+              Live
+            </span>
           </div>
           <div className="mt-5 rounded-2xl bg-gradient-to-br from-[#F5F7FB] to-white p-5">
             <svg viewBox="0 0 100 100" className="h-48 w-full">
               <defs>
-                <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <linearGradient
+                  id="lineGradient"
+                  x1="0%"
+                  y1="0%"
+                  x2="0%"
+                  y2="100%"
+                >
                   <stop offset="0%" stopColor="#3D64FF" stopOpacity="0.5" />
                   <stop offset="100%" stopColor="#3D64FF" stopOpacity="0.05" />
                 </linearGradient>
@@ -167,7 +202,15 @@ export default function JobsPage() {
               {jobVelocity.map((item, index) => {
                 const x = (index / (jobVelocity.length - 1)) * 100;
                 const y = 100 - (item.value / maxVelocity) * 100;
-                return <circle key={item.label} cx={x} cy={y} r="2.2" fill="#3D64FF" />;
+                return (
+                  <circle
+                    key={item.label}
+                    cx={x}
+                    cy={y}
+                    r="2.2"
+                    fill="#3D64FF"
+                  />
+                );
               })}
               {jobVelocity.map((item, index) => {
                 const x = (index / (jobVelocity.length - 1)) * 100;
@@ -209,26 +252,37 @@ export default function JobsPage() {
             <div className="flex items-center gap-3">
               <BarChart3 className="h-5 w-5 text-[#3D64FF]" />
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">Stage load</p>
-                <h2 className="text-lg font-semibold text-[#181B31]">Active workload</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">
+                  Stage load
+                </p>
+                <h2 className="text-lg font-semibold text-[#181B31]">
+                  Active workload
+                </h2>
               </div>
             </div>
             <ArrowRight className="h-4 w-4 text-[#8A94A6]" />
           </div>
           <div className="mt-5 space-y-4">
             {stageDistribution.map((stage) => {
-              const maxCount = Math.max(...stageDistribution.map((item) => item.count));
+              const maxCount = Math.max(
+                ...stageDistribution.map((item) => item.count)
+              );
               const width = `${Math.max(12, (stage.count / maxCount) * 100)}%`;
               return (
                 <div key={stage.label} className="space-y-2">
                   <div className="flex items-center justify-between text-sm text-[#4B5563]">
-                    <span className="font-medium text-[#181B31]">{stage.label}</span>
+                    <span className="font-medium text-[#181B31]">
+                      {stage.label}
+                    </span>
                     <span className="rounded-full bg-[#F5F7FB] px-3 py-1 text-xs font-semibold text-[#3D64FF]">
                       {stage.count}
                     </span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-[#EEF2F7]">
-                    <div className="h-2 rounded-full bg-gradient-to-r from-[#3D64FF] to-[#7C8CFF]" style={{ width }} />
+                    <div
+                      className="h-2 rounded-full bg-gradient-to-r from-[#3D64FF] to-[#7C8CFF]"
+                      style={{ width }}
+                    />
                   </div>
                 </div>
               );
@@ -242,8 +296,12 @@ export default function JobsPage() {
           <div className="flex items-center gap-3">
             <Briefcase className="h-5 w-5 text-[#3D64FF]" />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">Job list</p>
-              <h2 className="text-lg font-semibold text-[#181B31]">All openings</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">
+                Job list
+              </p>
+              <h2 className="text-lg font-semibold text-[#181B31]">
+                All openings
+              </h2>
             </div>
           </div>
           <Link
@@ -269,11 +327,13 @@ export default function JobsPage() {
                   onClick={() => setSortingFilter(option.value)}
                   className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     sortingFilter === option.value
-                      ? 'border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary'
-                      : 'border-[#E5E7EB] text-[#4B5563] hover:border-[#3D64FF]/40 hover:text-[#3D64FF]'
+                      ? "border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary"
+                      : "border-[#E5E7EB] text-[#4B5563] hover:border-[#3D64FF]/40 hover:text-[#3D64FF]"
                   }`}
                 >
-                  {option.value === 'not_started' && <AlertTriangle className="h-3.5 w-3.5" />}
+                  {option.value === "not_started" && (
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                  )}
                   {option.label}
                 </button>
               ))}
@@ -293,8 +353,8 @@ export default function JobsPage() {
                   onClick={() => setStatusFilter(option.value)}
                   className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     statusFilter === option.value
-                      ? 'border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF]'
-                      : 'border-[#E5E7EB] text-[#4B5563] hover:border-[#3D64FF]/40 hover:text-[#3D64FF]'
+                      ? "border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF]"
+                      : "border-[#E5E7EB] text-[#4B5563] hover:border-[#3D64FF]/40 hover:text-[#3D64FF]"
                   }`}
                 >
                   {option.label}
@@ -337,7 +397,7 @@ export default function JobsPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <p className="font-semibold">{job.title}</p>
-                  {job.sortingState === 'not_started' && (
+                  {job.sortingState === "not_started" && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF1F2] px-2 py-1 text-[11px] font-semibold text-[#9A1035]">
                       <AlertTriangle className="h-3 w-3" />
                       Needs sorting
@@ -350,23 +410,29 @@ export default function JobsPage() {
                 </div>
               </div>
               <span
-                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[job.status] ?? 'bg-[#EEF2F7] text-[#1F2A44]'}`}
+                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                  statusStyles[job.status] ?? "bg-[#EEF2F7] text-[#1F2A44]"
+                }`}
               >
                 <span className="h-2 w-2 rounded-full bg-current" />
                 {job.status}
               </span>
               <span
-                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${sortingStyles[job.sortingState].className}`}
+                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                  sortingStyles[job.sortingState].className
+                }`}
               >
                 <span className="h-2 w-2 rounded-full bg-current" />
                 {sortingStyles[job.sortingState].label}
               </span>
-              <span className="text-sm font-medium text-[#1F2A44]">{job.owner}</span>
+              <span className="text-sm font-medium text-[#1F2A44]">
+                {job.owner}
+              </span>
               <div className="flex items-center justify-between gap-2 text-xs text-[#6B7280]">
                 <span className="flex flex-col gap-1">
                   <span>
                     Updated {job.updated}
-                    {job.lastSorted ? ` • Last sort ${job.lastSorted}` : ''}
+                    {job.lastSorted ? ` • Last sort ${job.lastSorted}` : ""}
                   </span>
                   <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[#EAF7ED] px-3 py-1 font-semibold text-[#1B806A]">
                     <Users2 className="h-3.5 w-3.5" />
@@ -379,7 +445,8 @@ export default function JobsPage() {
           ))}
           {filteredJobs.length === 0 && (
             <div className="px-4 py-6 text-sm text-[#6B7280]">
-              No jobs match the selected filters. Try clearing the search or sorting state.
+              No jobs match the selected filters. Try clearing the search or
+              sorting state.
             </div>
           )}
         </div>

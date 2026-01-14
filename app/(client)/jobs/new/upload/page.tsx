@@ -1,18 +1,26 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Briefcase, FileUp, LinkIcon, Sparkles, UploadCloud } from 'lucide-react';
-import type { JobSummary } from '../../data';
-import { useJobCreation } from '@/app/components/job/JobCreationProvider';
-import { jobs, jobDetails } from '../../data';
-import { useSession } from 'next-auth/react';
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowLeft,
+  Briefcase,
+  FileUp,
+  LinkIcon,
+  Plus,
+  Sparkles,
+  UploadCloud,
+} from "lucide-react";
+import type { JobSummary } from "../../data";
+import { useJobCreation } from "@/app/components/job/JobCreationProvider";
+import { jobs, jobDetails } from "../../data";
+import { useSession } from "next-auth/react";
 
 type SelectedJob = {
   id: string | null;
   title: string;
-  status?: JobSummary['status'];
+  status?: JobSummary["status"];
   owner?: string;
   updated?: string;
 };
@@ -21,7 +29,11 @@ type ApiJob = {
   id: string;
   title: string;
   status?: string | null;
-  createdBy?: { id: string; name?: string | null; email?: string | null } | null;
+  createdBy?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  } | null;
   updatedAt?: string | null;
 };
 
@@ -53,19 +65,19 @@ export default function UploadCandidatesPage() {
     setAiForm,
   } = useJobCreation();
 
-  const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
+  const [selectedJobId, setSelectedJobId] = useState(jobId ?? "");
   const [apiJobs, setApiJobs] = useState<Record<string, ApiJob>>({});
   const [isLoadingApiJobs, setIsLoadingApiJobs] = useState(false);
-  const currentUserName = session?.user?.name?.trim() || 'You';
+  const currentUserName = session?.user?.name?.trim() || "You";
 
   useEffect(() => {
-    setSelectedJobId(jobId ?? '');
+    setSelectedJobId(jobId ?? "");
   }, [jobId]);
 
   useEffect(() => {
-    const sectionParam = searchParams.get('section');
-    const jobIdParam = searchParams.get('jobId');
-    const titleParam = searchParams.get('title');
+    const sectionParam = searchParams.get("section");
+    const jobIdParam = searchParams.get("jobId");
+    const titleParam = searchParams.get("title");
     hydrateFromQuery(sectionParam, jobIdParam, titleParam);
   }, [hydrateFromQuery, searchParams]);
 
@@ -73,10 +85,12 @@ export default function UploadCandidatesPage() {
     const fetchJobs = async () => {
       setIsLoadingApiJobs(true);
       try {
-        const response = await fetch('/api/jobs');
+        const response = await fetch("/api/jobs");
         if (!response.ok) return;
         const payload = await response.json();
-        const fetched = Array.isArray(payload?.jobs) ? (payload.jobs as ApiJob[]) : [];
+        const fetched = Array.isArray(payload?.jobs)
+          ? (payload.jobs as ApiJob[])
+          : [];
         setApiJobs(
           fetched.reduce<Record<string, ApiJob>>((acc, job) => {
             if (job.id) acc[job.id] = job;
@@ -95,10 +109,13 @@ export default function UploadCandidatesPage() {
 
   const selectedJob = useMemo<SelectedJob | null>(() => {
     const apiJob = selectedJobId ? apiJobs[selectedJobId] : null;
-    const apiOwner = apiJob?.createdBy?.name || apiJob?.createdBy?.email || undefined;
+    const apiOwner =
+      apiJob?.createdBy?.name || apiJob?.createdBy?.email || undefined;
 
     if (selectedJobId) {
-      const known = jobDetails[selectedJobId] ?? jobs.find((job) => job.id === selectedJobId);
+      const known =
+        jobDetails[selectedJobId] ??
+        jobs.find((job) => job.id === selectedJobId);
       if (known) {
         return {
           id: known.id,
@@ -113,10 +130,10 @@ export default function UploadCandidatesPage() {
     if (jobId || aiForm.title.trim()) {
       return {
         id: jobId ?? null,
-        title: aiForm.title.trim() || 'Untitled role',
-        status: jobId ? 'Draft' : undefined,
+        title: aiForm.title.trim() || "Untitled role",
+        status: jobId ? "Draft" : undefined,
         owner: apiOwner ?? undefined,
-        updated: 'Just now',
+        updated: "Just now",
       };
     }
 
@@ -137,7 +154,7 @@ export default function UploadCandidatesPage() {
   };
 
   const handleNavigateToCraft = () => {
-    router.push('/jobs/new');
+    router.push("/jobs/new");
   };
 
   return (
@@ -160,14 +177,18 @@ export default function UploadCandidatesPage() {
               <Sparkles className="h-4 w-4 text-[#3D64FF]" />
               Upload candidates
             </div>
-            <h1 className="text-3xl font-semibold leading-tight text-[#181B31] lg:text-4xl">Add your talent pool</h1>
+            <h1 className="text-3xl font-semibold leading-tight text-[#181B31] lg:text-4xl">
+              Add your talent pool
+            </h1>
             <p className="max-w-2xl text-sm text-[#4B5563] lg:text-base">
-              Drop CVs, upload a ZIP, or add a drive link. You can hop back to the role builder at any time to refine the
-              JD.
+              Drop CVs, upload a ZIP, or add a drive link. You can hop back to
+              the role builder at any time to refine the JD.
             </p>
           </div>
           <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF]/90 p-5 text-sm text-[#4B5563] shadow-card-soft lg:w-[360px]">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Workflow progress</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
+              Workflow progress
+            </p>
             <div className="mt-3 space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span>CVs queued</span>
@@ -182,7 +203,9 @@ export default function UploadCandidatesPage() {
                 </span>
               </div>
             </div>
-            <p className="mt-2 text-xs text-[#8A94A6]">Sorting is staged—no progress lost when you switch pages.</p>
+            <p className="mt-2 text-xs text-[#8A94A6]">
+              Sorting is staged—no progress lost when you switch pages.
+            </p>
           </div>
         </div>
       </section>
@@ -192,14 +215,16 @@ export default function UploadCandidatesPage() {
           <div className="rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Selected job</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
+                  Selected job
+                </p>
                 <div className="flex items-center gap-3 text-sm">
                   <span className="inline-flex items-center gap-2 rounded-full bg-[#F5F7FB] px-3 py-1 font-semibold text-[#1F2A44]">
                     <Briefcase className="h-3.5 w-3.5 text-[#3D64FF]" />
                     {selectedJob.title}
                   </span>
                   <span className="rounded-full bg-[#E8F2FF] px-3 py-1 text-xs font-semibold text-[#1C64F2]">
-                    ID {selectedJob.id ?? 'TBD'}
+                    ID {selectedJob.id ?? "TBD"}
                   </span>
                   {selectedJob.status && (
                     <span className="rounded-full bg-[#FFF5E5] px-3 py-1 text-xs font-semibold text-[#A26B00]">
@@ -208,8 +233,8 @@ export default function UploadCandidatesPage() {
                   )}
                 </div>
                 <div className="text-xs text-[#8A94A6]">
-                  <p>Created by {selectedJob.owner ?? 'Unknown creator'}</p>
-                  <p>Updated {selectedJob.updated ?? 'Just now'}</p>
+                  <p>Created by {selectedJob.owner ?? "Unknown creator"}</p>
+                  <p>Updated {selectedJob.updated ?? "Just now"}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -240,15 +265,22 @@ export default function UploadCandidatesPage() {
             <div className="flex items-center gap-3">
               <Briefcase className="h-5 w-5 text-[#3D64FF]" />
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Choose job</p>
-                <h2 className="text-lg font-semibold text-[#181B31]">Select where to upload</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
+                  Choose job
+                </p>
+                <h2 className="text-lg font-semibold text-[#181B31]">
+                  Select where to upload
+                </h2>
               </div>
             </div>
             <p className="mt-2 text-sm text-[#4B5563]">
-              Arriving directly? Pick the job that should receive this intake. We&apos;ll surface its ID and status once selected.
+              Arriving directly? Pick the job that should receive this intake.
+              We&apos;ll surface its ID and status once selected.
             </p>
             <div className="mt-4 space-y-3">
-              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Recent jobs</label>
+              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">
+                Recent jobs
+              </label>
               <select
                 value={selectedJobId}
                 onChange={(event) => handleSelectJob(event.target.value)}
@@ -263,13 +295,15 @@ export default function UploadCandidatesPage() {
               </select>
             </div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs text-[#8A94A6]">Need a new role? Start a fresh draft and return here to upload.</div>
+              <div className="text-xs text-[#8A94A6]">
+                Need a new role? Start a fresh draft and return here to upload.
+              </div>
               <Link
                 href="/jobs/new"
-                className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F5F7FB] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]"
+                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-2 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]"
               >
-                Create new job
-                <ArrowLeft className="h-4 w-4 rotate-180" />
+                <Plus className="h-4 w-4" />
+                Create New Job
               </Link>
             </div>
           </div>
@@ -285,8 +319,12 @@ export default function UploadCandidatesPage() {
             <div className="relative space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-[#181B31]">Candidate intake</h2>
-                  <p className="text-sm text-[#4B5563]">Upload CVs or share a drive folder.</p>
+                  <h2 className="text-lg font-semibold text-[#181B31]">
+                    Candidate intake
+                  </h2>
+                  <p className="text-sm text-[#4B5563]">
+                    Upload CVs or share a drive folder.
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -315,20 +353,37 @@ export default function UploadCandidatesPage() {
                 <label className="group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-[#DCE0E0] bg-[#FFFFFF] p-8 text-center text-sm text-[#4B5563] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]">
                   <FileUp className="h-10 w-10 text-[#3D64FF]" />
                   <div>
-                    <p className="text-base font-semibold text-[#181B31]">Drag &amp; drop CVs</p>
-                    <p className="mt-1 text-xs text-[#8A94A6]">PDF, DOCX, or TXT up to 20MB each.</p>
+                    <p className="text-base font-semibold text-[#181B31]">
+                      Drag &amp; drop CVs
+                    </p>
+                    <p className="mt-1 text-xs text-[#8A94A6]">
+                      PDF, DOCX, or TXT up to 20MB each.
+                    </p>
                   </div>
-                  <input type="file" multiple className="hidden" onChange={handleUploadFiles} />
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleUploadFiles}
+                  />
                 </label>
                 <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 text-sm text-[#4B5563]">
-                  <p className="text-base font-semibold text-[#181B31]">Upload a ZIP</p>
+                  <p className="text-base font-semibold text-[#181B31]">
+                    Upload a ZIP
+                  </p>
                   <p className="mt-2 text-xs text-[#8A94A6]">
-                    Bundle a folder of CVs. We&apos;ll unpack and deduplicate automatically.
+                    Bundle a folder of CVs. We&apos;ll unpack and deduplicate
+                    automatically.
                   </p>
                   <label className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25">
                     <UploadCloud className="h-4 w-4" />
                     Choose ZIP
-                    <input type="file" accept=".zip" className="hidden" onChange={handleZipUpload} />
+                    <input
+                      type="file"
+                      accept=".zip"
+                      className="hidden"
+                      onChange={handleZipUpload}
+                    />
                   </label>
                   {zipFileName && (
                     <p className="mt-4 rounded-2xl border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-3 py-2 text-xs font-medium text-[#3D64FF]">
@@ -339,7 +394,9 @@ export default function UploadCandidatesPage() {
               </div>
 
               <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-5 text-sm text-[#4B5563]">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Optional drive link</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
+                  Optional drive link
+                </p>
                 <div className="mt-3 flex items-center gap-3 rounded-2xl border border-[#DCE0E0] bg-[#F5F7FB] px-4">
                   <LinkIcon className="h-4 w-4 text-[#3D64FF]" />
                   <input
@@ -358,15 +415,19 @@ export default function UploadCandidatesPage() {
 
           <div className="space-y-6">
             <div className="rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft backdrop-blur">
-              <h3 className="text-lg font-semibold text-[#181B31]">Ranking configuration</h3>
+              <h3 className="text-lg font-semibold text-[#181B31]">
+                Ranking configuration
+              </h3>
               <p className="mt-1 text-sm text-[#4B5563]">
-                Choose how many candidates to surface for the first pass. You can rerun with different limits whenever
-                you like.
+                Choose how many candidates to surface for the first pass. You
+                can rerun with different limits whenever you like.
               </p>
               <div className="mt-6 space-y-6">
                 <div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium text-[#181B31]">Number of top candidates</span>
+                    <span className="font-medium text-[#181B31]">
+                      Number of top candidates
+                    </span>
                     <span className="rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-3 py-1 text-xs font-semibold text-[#3D64FF]">
                       {topCandidates} candidates
                     </span>
@@ -377,7 +438,9 @@ export default function UploadCandidatesPage() {
                     max={50}
                     step={5}
                     value={topCandidates}
-                    onChange={(event) => setTopCandidates(Number(event.target.value))}
+                    onChange={(event) =>
+                      setTopCandidates(Number(event.target.value))
+                    }
                     className="mt-4 w-full accent-[#3D64FF]"
                   />
                   <div className="mt-2 flex justify-between text-[11px] text-[#8A94A6]">
@@ -388,7 +451,9 @@ export default function UploadCandidatesPage() {
                 </div>
 
                 <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-4 text-xs text-[#4B5563]">
-                  <p className="text-sm font-semibold text-[#181B31]">Usage preview</p>
+                  <p className="text-sm font-semibold text-[#181B31]">
+                    Usage preview
+                  </p>
                   <div className="mt-3 flex items-center justify-between">
                     <span>Estimated credits consumed</span>
                     <span className="rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-1 text-xs font-semibold text-[#3D64FF]">
@@ -401,11 +466,12 @@ export default function UploadCandidatesPage() {
 
             <div className="flex flex-col gap-4 rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 text-sm text-[#4B5563]">
               <p>
-                The AI will normalise each CV, score against your job factors, and provide reasoning for every
-                recommendation.
+                The AI will normalise each CV, score against your job factors,
+                and provide reasoning for every recommendation.
               </p>
               <p className="text-xs text-[#8A94A6]">
-                Not ready to sort yet? Save the job and kick off sorting from the Jobs list or job details later.
+                Not ready to sort yet? Save the job and kick off sorting from
+                the Jobs list or job details later.
               </p>
               <div className="flex flex-wrap justify-end gap-3">
                 <Link
@@ -424,17 +490,17 @@ export default function UploadCandidatesPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setSubmitError('');
+                    setSubmitError("");
                     setCreatedJobId(null);
                     setShowConfirmation(true);
-                    setProcessingState('idle');
+                    setProcessingState("idle");
                     setProgress(0);
                   }}
                   disabled={!canStartSorting}
                   className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-wide transition ${
                     canStartSorting
-                      ? 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'
-                      : 'cursor-not-allowed border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]'
+                      ? "border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
+                      : "cursor-not-allowed border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]"
                   }`}
                 >
                   Start Sorting

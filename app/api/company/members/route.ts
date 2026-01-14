@@ -6,6 +6,14 @@ import prisma from "@/app/lib/prisma";
 const authSecret = process.env.NEXTAUTH_SECRET ?? "dev-secret-change-me";
 export const dynamic = "force-dynamic";
 
+function buildPublicUrlFromKey(key?: string | null) {
+  const trimmed = key?.trim();
+  if (!trimmed?.length) return null;
+  if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("/")) return trimmed;
+  const publicBase = (process.env.S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+  return publicBase ? `${publicBase}/${trimmed}` : trimmed;
+}
+
 async function getSessionContext(request: NextRequest) {
   const token = (await getToken({
     req: request,
@@ -20,17 +28,25 @@ async function getSessionContext(request: NextRequest) {
     return { userId: null, organizationId: null };
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: tokenOrgId ? { userId, organizationId: tokenOrgId } : { userId },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, organizationId: true, role: true, userId: true },
-  });
-
   return {
     userId,
-    organizationId: tokenOrgId ?? membership?.organizationId ?? null,
-    membershipRole: membership?.role ?? null,
-    membershipId: membership?.id ?? null,
+    organizationId:
+      tokenOrgId ??
+      (
+        await prisma.user.findUnique({
+          where: { id: userId },
+          select: { defaultOrgId: true, role: true },
+        })
+      )?.defaultOrgId ??
+      null,
+    membershipRole:
+      (
+        await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true },
+        })
+      )?.role ?? null,
+    membershipId: null,
   };
 }
 
@@ -41,52 +57,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: { userId: context.userId, organizationId: context.organizationId },
-    select: { organizationId: true, role: true, userId: true },
-  });
-
-  if (!membership) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
   const organization = await prisma.organization.findUnique({
-    where: { id: membership.organizationId },
-    select: { ownerId: true },
+    where: { id: context.organizationId },
+    select: { ownerId: true, id: true },
   });
 
   if (!organization) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  const actorIsOwner = organization.ownerId === membership.userId;
+  const actorIsOwner = organization.ownerId === context.userId;
 
-  if (membership.role !== "COMPANY_ADMIN" && !actorIsOwner) {
+  if (context.membershipRole !== "COMPANY_ADMIN" && context.membershipRole !== "SUPER_ADMIN" && !actorIsOwner) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const members = await prisma.membership.findMany({
-    where: { organizationId: membership.organizationId },
+  const members = await prisma.user.findMany({
+    where: { defaultOrgId: organization.id },
     select: {
       id: true,
+      name: true,
+      email: true,
+      image: true,
       role: true,
-      status: true,
+      profileStatus: true,
       createdAt: true,
-      lastActiveAt: true,
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
-        },
-      },
+      lastLoginAt: true,
     },
     orderBy: { createdAt: "asc" },
   });
 
   const pendingInvites = await prisma.invitation.count({
     where: {
-      organizationId: membership.organizationId,
+      organizationId: organization.id,
       acceptedAt: null,
       expiresAt: { gt: new Date() },
     },
@@ -98,10 +101,16 @@ export async function GET(request: NextRequest) {
     members: members.map((member) => ({
       id: member.id,
       role: member.role,
-      status: member.status,
+      status: member.profileStatus ?? "ACTIVE",
       createdAt: member.createdAt,
-      lastActiveAt: member.lastActiveAt,
-      user: member.user,
+      lastActiveAt: member.lastLoginAt,
+      user: {
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        image: member.image,
+        imageUrl: buildPublicUrlFromKey(member.image),
+      },
     })),
   });
 }
@@ -118,17 +127,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: { userId: context.userId, organizationId: context.organizationId },
-    select: { id: true, role: true, organizationId: true, userId: true },
-  });
-
-  if (!membership) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const organization = await prisma.organization.findUnique({
-    where: { id: membership.organizationId },
+    where: { id: context.organizationId },
     select: { ownerId: true },
   });
 
@@ -136,9 +136,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  const actorIsOwner = organization.ownerId === membership.userId;
+  const actorIsOwner = organization.ownerId === context.userId;
 
-  if (membership.role !== "COMPANY_ADMIN" && !actorIsOwner) {
+  if (context.membershipRole !== "COMPANY_ADMIN" && context.membershipRole !== "SUPER_ADMIN" && !actorIsOwner) {
     return NextResponse.json({ error: "Only company owners or admins can update member roles" }, { status: 403 });
   }
 
@@ -154,49 +154,47 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Invalid payload", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const targetMembership = await prisma.membership.findUnique({
+  const targetUser = await prisma.user.findUnique({
     where: { id: parsed.data.memberId },
     select: {
       id: true,
+      name: true,
+      email: true,
+      image: true,
       role: true,
-      status: true,
-      organizationId: true,
-      userId: true,
+      profileStatus: true,
+      defaultOrgId: true,
       createdAt: true,
-      lastActiveAt: true,
-      user: {
-        select: { id: true, name: true, email: true, image: true },
-      },
+      lastLoginAt: true,
     },
   });
 
-  if (!targetMembership || targetMembership.organizationId !== membership.organizationId) {
+  if (!targetUser || targetUser.defaultOrgId !== context.organizationId) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
   }
 
-  const targetIsOwner = targetMembership.userId === organization.ownerId;
+  const targetIsOwner = targetUser.id === organization.ownerId;
 
   if (targetIsOwner && !actorIsOwner) {
     return NextResponse.json({ error: "Only another owner can change an owner's role" }, { status: 403 });
   }
 
-  if (targetIsOwner && targetMembership.userId === membership.userId) {
+  if (targetIsOwner && targetUser.id === context.userId) {
     return NextResponse.json({ error: "Owners cannot change their own role" }, { status: 403 });
   }
 
-  const updated = await prisma.membership.update({
-    where: { id: targetMembership.id },
+  const updated = await prisma.user.update({
+    where: { id: targetUser.id },
     data: { role: parsed.data.role },
     select: {
       id: true,
+      name: true,
+      email: true,
+      image: true,
       role: true,
-      status: true,
+      profileStatus: true,
       createdAt: true,
-      lastActiveAt: true,
-      organizationId: true,
-      user: {
-        select: { id: true, name: true, email: true, image: true },
-      },
+      lastLoginAt: true,
     },
   });
 
@@ -204,10 +202,10 @@ export async function PATCH(request: NextRequest) {
     member: {
       id: updated.id,
       role: updated.role,
-      status: updated.status,
+      status: updated.profileStatus ?? "ACTIVE",
       createdAt: updated.createdAt,
-      lastActiveAt: updated.lastActiveAt,
-      user: updated.user,
+      lastActiveAt: updated.lastLoginAt,
+      user: { id: updated.id, name: updated.name, email: updated.email, image: updated.image },
     },
     ownerId: organization.ownerId,
   });

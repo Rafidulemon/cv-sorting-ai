@@ -2,11 +2,12 @@
 
 import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Button from "@/app/components/buttons/Button";
 import ChangePasswordModal from "@/app/components/modals/ChangePasswordModal";
 import TextInput from "@/app/components/inputs/TextInput";
+import ClientLayoutLoading from "@/app/components/loading/ClientLayoutLoading";
 import {
   Bell,
   CheckCircle2,
@@ -17,13 +18,29 @@ import {
   Sparkles,
   Lock,
   X,
+  UploadCloud,
 } from "lucide-react";
 
 const defaultAvatar = "/images/default_dp.png";
+const avatarBaseUrl = (process.env.NEXT_PUBLIC_S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+
+const resolveAvatar = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return defaultAvatar;
+  if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("data:")) return trimmed;
+  const normalized = trimmed.replace(/^\/+/, "");
+  const normalizedStorage = normalized.replace(/^uploads\/profile-avatars\//, "uploads/profile-picture/");
+  if (normalizedStorage.startsWith("uploads/")) {
+    if (avatarBaseUrl) return `${avatarBaseUrl}/${normalizedStorage}`;
+    return `/${normalizedStorage}`;
+  }
+  if (trimmed.startsWith("/")) return trimmed;
+  return avatarBaseUrl ? `${avatarBaseUrl}/${normalizedStorage}` : `/${normalizedStorage}`;
+};
 
 type Profile = {
   name: string;
-  title: string;
+  designation: string;
   team: string;
   email: string;
   phone: string;
@@ -58,6 +75,15 @@ const formatDateLabel = (value?: string | Date | null) => {
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+};
+
+const formatStatusLabel = (value?: string | null) => {
+  if (!value) return "—";
+  const normalized = value.toLowerCase();
+  if (normalized === "active") return "Active";
+  if (normalized === "pending") return "Pending";
+  if (normalized === "disabled") return "Disabled";
+  return value;
 };
 
 const mapJobStatus = (status?: string | null): JobActivity["status"] => {
@@ -106,12 +132,29 @@ type EditProfileModalProps = {
   onClose: () => void;
   draft: Profile;
   onChange: (key: keyof Profile) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onImageChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isSaving: boolean;
   error?: string;
+  avatarDisplay: string;
 };
 
-function EditProfileModal({ open, onClose, draft, onChange, onSubmit, isSaving, error }: EditProfileModalProps) {
+function EditProfileModal({
+  open,
+  onClose,
+  draft,
+  onChange,
+  onImageChange,
+  onSubmit,
+  isSaving,
+  error,
+  avatarDisplay,
+}: EditProfileModalProps) {
+  const [avatarPreview, setAvatarPreview] = useState(() => resolveAvatar(avatarDisplay || draft.image));
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
@@ -120,6 +163,68 @@ function EditProfileModal({ open, onClose, draft, onChange, onSubmit, isSaving, 
       document.body.style.overflow = previous;
     };
   }, [open]);
+
+  useEffect(() => {
+    setAvatarPreview(resolveAvatar(avatarDisplay || draft.image));
+  }, [draft.image, avatarDisplay]);
+
+  useEffect(() => {
+    if (!open) {
+      setAvatarError("");
+      setAvatarUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }, [open]);
+
+  const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setAvatarError("");
+
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Please upload an image file (PNG, JPG, WebP, or SVG).");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError("Avatar must be 5MB or smaller.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("fileName", file.name);
+    formData.append("contentType", file.type);
+
+    setAvatarUploading(true);
+    try {
+      const response = await fetch("/api/jobs/upload-url?purpose=profile-avatar", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Unable to upload avatar right now.");
+      }
+      const key = payload?.key ?? "";
+      const publicUrl = payload?.publicUrl ?? "";
+      const newImage = key || publicUrl;
+      if (newImage) {
+        onImageChange(newImage);
+        setAvatarPreview(resolveAvatar(publicUrl || newImage));
+      }
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (uploadError) {
+      console.error(uploadError);
+      setAvatarError((uploadError as Error)?.message ?? "Unable to upload avatar right now.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   if (!open || typeof document === "undefined") return null;
 
@@ -167,18 +272,54 @@ function EditProfileModal({ open, onClose, draft, onChange, onSubmit, isSaving, 
           </div>
 
           <form onSubmit={onSubmit} className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+            <div className="rounded-2xl border border-[#EEF2F7] bg-[#f8fafc] px-4 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white">
+                    <Image
+                      src={avatarPreview}
+                      alt="Profile avatar preview"
+                      fill
+                      sizes="64px"
+                      className="object-cover"
+                      onError={() => setAvatarPreview(defaultAvatar)}
+                      unoptimized
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-[#0f172a]">Profile photo</p>
+                    <p className="text-xs text-[#4b5563]">Used across your workspace and invites. Saved when you click “Save profile”.</p>
+                    {avatarError ? <p className="text-xs font-semibold text-danger-600">{avatarError}</p> : null}
+                  </div>
+                </div>
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    leftIcon={<UploadCloud className="h-4 w-4" />}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={avatarUploading || isSaving}
+                  >
+                    {avatarUploading ? "Uploading…" : "Upload photo"}
+                  </Button>
+                  <p className="text-[11px] text-[#6b7280]">PNG, JPG, WebP, SVG · Max 5MB</p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <TextInput label="Full name" value={draft.name} onChange={onChange("name")} isRequired />
-              <TextInput label="Title" value={draft.title} onChange={onChange("title")} />
+              <TextInput label="Designation" value={draft.designation} onChange={onChange("designation")} />
               <TextInput label="Team" value={draft.team} onChange={onChange("team")} />
               <TextInput label="Timezone" value={draft.timezone} onChange={onChange("timezone")} />
               <TextInput label="Phone" value={draft.phone} onChange={onChange("phone")} type="tel" />
-              <TextInput
-                label="Avatar image URL"
-                value={draft.image}
-                onChange={onChange("image")}
-                helperText="Leave blank to use the default avatar."
-              />
             </div>
 
             {error ? (
@@ -188,11 +329,11 @@ function EditProfileModal({ open, onClose, draft, onChange, onSubmit, isSaving, 
             ) : null}
 
             <div className="flex justify-end gap-3">
-              <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
+              <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving || avatarUploading}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Saving…" : "Save profile"}
+              <Button type="submit" disabled={isSaving || avatarUploading}>
+                {isSaving ? "Saving…" : avatarUploading ? "Uploading…" : "Save profile"}
               </Button>
             </div>
           </form>
@@ -207,7 +348,7 @@ export default function ProfilePage() {
   const { data: session } = useSession();
   const [profile, setProfile] = useState<Profile>(() => ({
     name: session?.user?.name ?? "",
-    title: "",
+    designation: "",
     team: "",
     email: session?.user?.email ?? "",
     phone: "",
@@ -218,6 +359,7 @@ export default function ProfilePage() {
     image: session?.user?.image ?? "",
   }));
   const [draftProfile, setDraftProfile] = useState<Profile>(profile);
+  const [profileAvatarSrc, setProfileAvatarSrc] = useState(resolveAvatar(profile.image));
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [jobs, setJobs] = useState<JobActivity[]>([]);
@@ -239,6 +381,10 @@ export default function ProfilePage() {
     }));
   }, [session]);
 
+  useEffect(() => {
+    setProfileAvatarSrc(resolveAvatar(profile.image));
+  }, [profile.image]);
+
   const fetchProfile = useCallback(async () => {
     setLoadingProfile(true);
     setProfileError("");
@@ -254,19 +400,28 @@ export default function ProfilePage() {
         return;
       }
       const user = payload.user as Partial<Profile & { profileStatus?: string; startedAt?: string }>;
-      setProfile((prev) => ({
-        ...prev,
-        name: user.name ?? prev.name,
-        title: user.title ?? prev.title,
-        team: user.team ?? prev.team,
-        email: user.email ?? prev.email,
-        phone: user.phone ?? prev.phone,
-        timezone: user.timezone ?? prev.timezone,
-        status: user.profileStatus ?? prev.status,
-        startDate: user.startedAt ? formatDateLabel(user.startedAt) : prev.startDate,
-        image: user.image ?? prev.image,
-        lastActive: payload?.membership?.lastActiveAt ? `Active · ${formatDateLabel(payload.membership.lastActiveAt)}` : prev.lastActive,
-      }));
+      const imageUrl = typeof payload?.imageUrl === "string" ? payload.imageUrl : undefined;
+      const imageKey = user.image ?? "";
+      const imageForDisplay = imageUrl ?? imageKey;
+      setProfile((prev) => {
+        const next = {
+          ...prev,
+          name: user.name ?? prev.name,
+          designation: user.designation ?? prev.designation,
+          team: user.team ?? prev.team,
+          email: user.email ?? prev.email,
+          phone: user.phone ?? prev.phone,
+          timezone: user.timezone ?? prev.timezone,
+          status: user.profileStatus ?? prev.status,
+          startDate: user.startedAt ? formatDateLabel(user.startedAt) : prev.startDate,
+          image: imageKey || prev.image,
+          lastActive: payload?.membership?.lastActiveAt
+            ? `Active · ${formatDateLabel(payload.membership.lastActiveAt)}`
+            : prev.lastActive,
+        };
+        setProfileAvatarSrc(resolveAvatar(imageForDisplay || next.image));
+        return next;
+      });
 
       const apiJobs: ApiJobPayload[] = Array.isArray(payload?.jobs) ? payload.jobs : [];
       setJobs(
@@ -311,11 +466,9 @@ export default function ProfilePage() {
     fetchProfile();
   }, [fetchProfile]);
 
-  const profileAvatar = profile.image?.trim().length ? profile.image : defaultAvatar;
-
   const personalDetails = [
     { label: "Full name", value: profile.name },
-    { label: "Title", value: profile.title },
+    { label: "Designation", value: profile.designation },
     { label: "Team", value: profile.team },
   ];
 
@@ -323,6 +476,12 @@ export default function ProfilePage() {
     { label: "Work email", value: profile.email, icon: Mail },
     { label: "Phone", value: profile.phone, icon: Phone },
     { label: "Timezone", value: profile.timezone, icon: Globe2 },
+  ];
+
+  const statusDetails = [
+    { label: "Status", value: formatStatusLabel(profile.status) },
+    { label: "Member since", value: profile.startDate || "—" },
+    { label: "Last active", value: profile.lastActive || "—" },
   ];
 
   const openEditModal = () => {
@@ -345,6 +504,10 @@ export default function ProfilePage() {
       setDraftProfile((prev) => ({ ...prev, [key]: event.target.value }));
     };
 
+  const handleAvatarChange = (value: string) => {
+    setDraftProfile((prev) => ({ ...prev, image: value }));
+  };
+
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaveError("");
@@ -352,7 +515,7 @@ export default function ProfilePage() {
 
     const payload = {
       name: draftProfile.name.trim(),
-      title: draftProfile.title.trim(),
+      designation: draftProfile.designation.trim(),
       team: draftProfile.team.trim(),
       phone: draftProfile.phone.trim(),
       timezone: draftProfile.timezone.trim(),
@@ -372,29 +535,39 @@ export default function ProfilePage() {
         throw new Error(message);
       }
 
-      const user = data.user as Partial<Profile & { profileStatus?: string; startedAt?: string }>;
+      const user = data.user as Partial<Profile & { profileStatus?: string; startedAt?: string; imageUrl?: string }>;
+      const imageUrl = typeof data?.imageUrl === "string" ? data.imageUrl : user?.imageUrl;
+      const imageKey = user?.image ?? payload.image ?? profile.image;
+      const imageForDisplay = imageUrl ?? imageKey;
 
-      setProfile((prev) => ({
-        ...prev,
-        name: user?.name ?? payload.name ?? prev.name,
-        title: user?.title ?? payload.title ?? prev.title,
-        team: user?.team ?? payload.team ?? prev.team,
-        email: user?.email ?? prev.email,
-        phone: user?.phone ?? payload.phone ?? prev.phone,
-        timezone: user?.timezone ?? payload.timezone ?? prev.timezone,
-        status: user?.profileStatus ?? prev.status,
-        startDate: user?.startedAt ? formatDateLabel(user.startedAt) : prev.startDate,
-        image: user?.image ?? payload.image ?? prev.image,
-      }));
+      const nextProfile: Profile = {
+        ...profile,
+        name: user?.name ?? payload.name ?? profile.name,
+        designation: user?.designation ?? payload.designation ?? profile.designation,
+        team: user?.team ?? payload.team ?? profile.team,
+        email: user?.email ?? profile.email,
+        phone: user?.phone ?? payload.phone ?? profile.phone,
+        timezone: user?.timezone ?? payload.timezone ?? profile.timezone,
+        status: user?.profileStatus ?? profile.status,
+        startDate: user?.startedAt ? formatDateLabel(user.startedAt) : profile.startDate,
+        image: imageKey,
+        lastActive: profile.lastActive,
+      };
+
+      setProfile(nextProfile);
+      setProfileAvatarSrc(resolveAvatar(imageForDisplay || nextProfile.image));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("profile:updated", { detail: { image: imageKey } }));
+      }
 
       setDraftProfile((prev) => ({
         ...prev,
         name: user?.name ?? payload.name ?? prev.name,
-        title: user?.title ?? payload.title ?? prev.title,
+        designation: user?.designation ?? payload.designation ?? prev.designation,
         team: user?.team ?? payload.team ?? prev.team,
         phone: user?.phone ?? payload.phone ?? prev.phone,
         timezone: user?.timezone ?? payload.timezone ?? prev.timezone,
-        image: user?.image ?? payload.image ?? prev.image,
+        image: imageKey ?? prev.image,
       }));
 
       setProfileError("");
@@ -406,6 +579,16 @@ export default function ProfilePage() {
       setSavingProfile(false);
     }
   };
+
+  const globalLoading = (
+    <div className="fixed inset-0 z-50">
+      <ClientLayoutLoading />
+    </div>
+  );
+
+  if (loadingProfile) {
+    return globalLoading;
+  }
 
   return (
     <div className="space-y-10 text-[#0f172a]">
@@ -420,11 +603,12 @@ export default function ProfilePage() {
               <div className="flex items-start gap-4">
                 <div className="relative h-16 w-16 overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_14px_32px_rgba(15,23,42,0.12)] lg:h-20 lg:w-20">
                   <Image
-                    src={profileAvatar}
+                    src={profileAvatarSrc}
                     alt={`${profile.name} avatar`}
                     fill
                     sizes="120px"
                     className="object-cover"
+                    onError={() => setProfileAvatarSrc(defaultAvatar)}
                     unoptimized
                   />
                 </div>
@@ -457,11 +641,6 @@ export default function ProfilePage() {
               Edit
             </Button>
           </div>
-          {loadingProfile ? (
-            <div className="rounded-2xl border border-[#EEF2F7] bg-[#f8fafc] px-4 py-3 text-sm text-[#4b5563]">
-              Loading profile…
-            </div>
-          ) : null}
           {profileError ? (
             <div className="rounded-2xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-700">
               {profileError}
@@ -493,6 +672,14 @@ export default function ProfilePage() {
                 </div>
               );
             })}
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {statusDetails.map((item) => (
+              <div key={item.label} className="rounded-2xl border border-[#EEF2F7] bg-white px-4 py-3 shadow-card-soft">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8A94A6]">{item.label}</p>
+                <p className="mt-1 text-sm font-semibold text-[#0f172a]">{item.value}</p>
+              </div>
+            ))}
           </div>
           <div className="flex flex-col gap-2 rounded-2xl border border-[#EEF2F7] bg-white px-4 py-3 shadow-card-soft md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
@@ -630,9 +817,11 @@ export default function ProfilePage() {
         onClose={closeEditModal}
         draft={draftProfile}
         onChange={handleDraftChange}
+        onImageChange={handleAvatarChange}
         onSubmit={handleProfileSubmit}
         isSaving={savingProfile}
         error={saveError}
+        avatarDisplay={profileAvatarSrc}
       />
       <ChangePasswordModal open={isPasswordOpen} onClose={closePasswordModal} />
     </div>

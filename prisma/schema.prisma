@@ -22,11 +22,10 @@ enum MembershipStatus {
   DISABLED
 }
 
-enum SignupStatus {
+enum OrganizationStatus {
   PENDING
-  EMAIL_SENT
+  EMAIL_VERIFIED
   COMPLETED
-  EXPIRED
 }
 
 enum PlanTier {
@@ -152,10 +151,11 @@ model User {
   image         String?
   lastLoginAt   DateTime?
   phone         String?
-  title         String?
+  designation   String?
   team          String?
   timezone      String?
-  profileStatus String?
+  profileStatus MembershipStatus?
+  role          UserRole   @default(VIEWER)
   startedAt     DateTime?
   passwordHash  String?
   defaultOrgId  String?
@@ -163,10 +163,7 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   defaultOrg        Organization?  @relation("UserDefaultOrg", fields: [defaultOrgId], references: [id])
-  accounts          Account[]
   sessions          Session[]
-  memberships       Membership[]
-  membershipInvites Membership[]   @relation("MembershipInviter")
   invitations       Invitation[]   @relation("InvitationInviter")
   createdOrgs       Organization[] @relation("OrgCreator")
   ownedOrganizations Organization[] @relation("OrgOwner")
@@ -185,6 +182,7 @@ model Organization {
   name            String
   slug            String       @unique
   ownerId         String
+  companyEmail    String?
   website         String?
   logo            String?
   domain          String?
@@ -196,6 +194,15 @@ model Organization {
   description     String?
   planTier        PlanTier     @default(FREEMIUM)
   planSlug        String       @default("free")
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+  billingCycle       BillingCycle       @default(MONTHLY)
+  renewsOn           DateTime?
+  startsOn           DateTime?
+  endsOn             DateTime?
+  provider           String?
+  externalCustomerId     String?
+  externalSubscriptionId String?
+  status          OrganizationStatus @default(PENDING)
   seatLimit       Int          @default(1)
   resumeAllotment Int          @default(10)
   creditsBalance  Int          @default(0)
@@ -207,9 +214,7 @@ model Organization {
   owner         User                      @relation("OrgOwner", fields: [ownerId], references: [id])
   createdBy     User?                      @relation("OrgCreator", fields: [createdById], references: [id])
   plan          PricingPlan                @relation(fields: [planSlug], references: [slug])
-  members       Membership[]
   invitations   Invitation[]
-  subscriptions OrganizationSubscription[]
   creditLedger  CreditLedger[]
   jobs          Job[]
   resumes       Resume[]
@@ -228,25 +233,6 @@ model Organization {
   @@index([planSlug])
 }
 
-model Membership {
-  id             String           @id @default(cuid())
-  userId         String
-  organizationId String
-  role           UserRole
-  status         MembershipStatus @default(ACTIVE)
-  invitedById    String?
-  lastActiveAt   DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  user         User         @relation(fields: [userId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
-  invitedBy    User?        @relation("MembershipInviter", fields: [invitedById], references: [id])
-
-  @@unique([userId, organizationId])
-  @@index([organizationId, role])
-}
-
 model Invitation {
   id             String    @id @default(cuid())
   organizationId String
@@ -262,49 +248,6 @@ model Invitation {
   invitedBy    User?        @relation("InvitationInviter", fields: [invitedById], references: [id])
 
   @@index([organizationId, email])
-}
-
-model SignupRequest {
-  id            String        @id @default(cuid())
-  email         String
-  name          String
-  companyName   String
-  passwordHash  String
-  role          String?
-  teamSize      String?
-  planSlug      String?
-  billingEmail  String?
-  status        SignupStatus  @default(PENDING)
-  token         String        @unique
-  expiresAt     DateTime
-  completedAt   DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-}
-
-model OrganizationSubscription {
-  id                     String             @id @default(cuid())
-  organizationId         String
-  plan                   PlanTier
-  planSlug               String
-  status                 SubscriptionStatus @default(TRIALING)
-  billingCycle           BillingCycle       @default(MONTHLY)
-  seats                  Int
-  resumesIncluded        Int
-  renewsOn               DateTime?
-  startsOn               DateTime           @default(now())
-  endsOn                 DateTime?
-  provider               String?
-  externalCustomerId     String?
-  externalSubscriptionId String?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id])
-  pricingPlan  PricingPlan  @relation(fields: [planSlug], references: [slug])
-
-  @@index([organizationId, status])
-  @@index([planSlug])
 }
 
 model CreditLedger {
@@ -349,7 +292,6 @@ model PricingPlan {
   updatedAt       DateTime @updatedAt
 
   organizations   Organization[]
-  subscriptions   OrganizationSubscription[]
 }
 
 model CreditUsage {
@@ -674,29 +616,6 @@ model AuditLog {
 
   @@index([organizationId, entityType])
   @@index([actorUserId])
-}
-
-model Account {
-  id                 String   @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?
-  access_token       String?
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?
-  session_state      String?
-  oauth_token_secret String?
-  oauth_token        String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@unique([provider, providerAccountId])
 }
 
 model Session {

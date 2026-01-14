@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { BillingCycle, PlanTier, SubscriptionStatus } from "@prisma/client";
+import { BillingCycle, MembershipStatus, PlanTier, SubscriptionStatus } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 import { pricingPlans } from "@/app/data/pricing";
 import { sendEmail } from "@/app/lib/mailer";
@@ -30,30 +30,10 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-function slugifyCompanyName(value: string) {
-  const base = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-")
-    .trim();
-  return base.length ? base : "workspace";
-}
-
-async function generateOrgSlug(name: string) {
-  const base = slugifyCompanyName(name);
-  let slug = base;
-  let attempt = 1;
-
-  // Limit attempts to prevent infinite loops.
-  while (attempt < 50) {
-    const existing = await prisma.organization.findUnique({ where: { slug } });
-    if (!existing) return slug;
-    slug = `${base}-${attempt}`;
-    attempt += 1;
-  }
-
-  return `${base}-${Date.now()}`;
+function toNullable(value?: string | null) {
+  if (value === null || value === undefined) return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
 }
 
 function resolvePlanTier(slug: string): PlanTier {
@@ -77,28 +57,33 @@ export async function POST(request: NextRequest) {
   }
 
   const { token, planSlug, billingEmail, paymentConfirmed } = parsed.data;
-  const signupRequest = await prisma.signupRequest.findUnique({ where: { token } });
 
-  if (!signupRequest) {
-    return NextResponse.json({ error: "Signup request not found" }, { status: 404 });
+  const verification = await prisma.verificationToken.findUnique({ where: { token } });
+  if (!verification) {
+    return NextResponse.json({ error: "Verification not found" }, { status: 404 });
   }
-
   const now = new Date();
-  if (signupRequest.status === "COMPLETED") {
-    return NextResponse.json({ error: "This signup has already been completed." }, { status: 410 });
-  }
-
-  if (signupRequest.expiresAt < now) {
-    await prisma.signupRequest.update({
-      where: { id: signupRequest.id },
-      data: { status: "EXPIRED" },
-    });
+  if (verification.expires < now) {
+    await prisma.verificationToken.delete({ where: { token } });
     return NextResponse.json({ error: "This confirmation link has expired." }, { status: 410 });
   }
 
-  const existingUser = await prisma.user.findUnique({ where: { email: signupRequest.email } });
-  if (existingUser) {
-    return NextResponse.json({ error: "An account with this email already exists. Please log in instead." }, { status: 409 });
+  if (!verification.identifier?.startsWith("org:")) {
+    return NextResponse.json({ error: "Invalid verification token" }, { status: 400 });
+  }
+  const orgId = verification.identifier.replace("org:", "");
+
+  const organization = await prisma.organization.findUnique({
+    where: { id: orgId },
+    include: { owner: true },
+  });
+
+  if (!organization) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  if (organization.status === "COMPLETED") {
+    return NextResponse.json({ error: "This signup has already been completed." }, { status: 410 });
   }
 
   const planFromDb = await prisma.pricingPlan.findUnique({ where: { slug: planSlug } });
@@ -165,92 +150,71 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Please confirm payment to finalize signup." }, { status: 400 });
   }
 
-  const organizationSlug = await generateOrgSlug(signupRequest.companyName);
   const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
   const dashboardUrl = new URL("/dashboard", request.nextUrl.origin).toString();
 
   const result = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        name: signupRequest.name,
-        email: signupRequest.email,
-        passwordHash: signupRequest.passwordHash,
-        emailVerified: new Date(),
-      },
-    });
+    const renewsOn = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    const organization = await tx.organization.create({
+    const updatedOrg = await tx.organization.update({
+      where: { id: organization.id },
       data: {
-        name: signupRequest.companyName,
-        slug: organizationSlug,
-        ownerId: user.id,
-        createdById: user.id,
         planTier,
         planSlug,
         seatLimit,
         resumeAllotment,
         creditsBalance,
-        billingEmail,
-      },
-    });
-
-    await tx.membership.create({
-      data: {
-        userId: user.id,
-        organizationId: organization.id,
-        role: "COMPANY_ADMIN",
-        status: "ACTIVE",
-        lastActiveAt: new Date(),
-      },
-    });
-
-    await tx.organizationSubscription.create({
-      data: {
-        organizationId: organization.id,
-        plan: planTier,
-        planSlug,
-        status: SubscriptionStatus.ACTIVE,
+        billingEmail: billingEmail ?? organization.billingEmail,
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
         billingCycle: BillingCycle.MONTHLY,
-        seats: seatLimit,
-        resumesIncluded: resumeAllotment,
-        renewsOn: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        renewsOn,
+        startsOn: organization.startsOn ?? new Date(),
+        status: "COMPLETED",
       },
-    });
-
-    await tx.signupRequest.update({
-      where: { id: signupRequest.id },
-      data: { status: "COMPLETED", planSlug, billingEmail, completedAt: new Date() },
+      include: { owner: true },
     });
 
     await tx.user.update({
-      where: { id: user.id },
-      data: { defaultOrgId: organization.id },
+      where: { id: organization.ownerId },
+      data: {
+        profileStatus: MembershipStatus.ACTIVE,
+        role: "COMPANY_ADMIN",
+        defaultOrgId: organization.id,
+        startedAt: organization.owner?.startedAt ?? new Date(),
+      },
     });
 
-    return { user, organization };
+    await tx.verificationToken.deleteMany({ where: { identifier: `org:${organization.id}` } });
+
+    return updatedOrg;
   });
 
   try {
     const invoiceEmail = buildSignupInvoiceEmail({
-      name: signupRequest.name,
-      companyName: signupRequest.companyName,
+      name: result.owner?.name,
+      companyName: result.name,
       planName,
       planPrice,
-      billingEmail,
+      billingEmail: billingEmail ?? organization.billingEmail ?? organization.companyEmail ?? "",
       seats: seatLimit,
       invoiceNumber,
     });
 
     const completionEmail = buildSignupCompleteEmail({
-      name: signupRequest.name,
-      companyName: signupRequest.companyName,
+      name: result.owner?.name,
+      companyName: result.name,
       dashboardUrl,
     });
 
     await Promise.all([
-      sendEmail({ to: billingEmail, subject: invoiceEmail.subject, html: invoiceEmail.html, text: invoiceEmail.text }),
       sendEmail({
-        to: signupRequest.email,
+        to: billingEmail ?? organization.billingEmail ?? organization.companyEmail ?? "",
+        subject: invoiceEmail.subject,
+        html: invoiceEmail.html,
+        text: invoiceEmail.text,
+      }),
+      sendEmail({
+        to: organization.owner?.email ?? billingEmail ?? organization.companyEmail ?? "",
         subject: completionEmail.subject,
         html: completionEmail.html,
         text: completionEmail.text,
@@ -267,9 +231,10 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     organization: {
-      id: result.organization.id,
-      slug: result.organization.slug,
-      name: result.organization.name,
+      id: result.id,
+      slug: result.slug,
+      name: result.name,
+      status: result.status,
     },
     plan: {
       slug: planSlug,

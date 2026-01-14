@@ -30,15 +30,10 @@ export async function GET(request: NextRequest) {
     where: { id: userId },
     select: {
       defaultOrgId: true,
-      memberships: {
-        select: { organizationId: true },
-        take: 1,
-        orderBy: { createdAt: "asc" },
-      },
     },
   });
 
-  const orgId = user?.defaultOrgId ?? user?.memberships?.[0]?.organizationId ?? null;
+  const orgId = user?.defaultOrgId ?? null;
   if (!orgId) {
     return NextResponse.json(
       { remaining: 0, total: 0, plan: "No org", planTier: null, renewsOn: null },
@@ -53,18 +48,11 @@ export async function GET(request: NextRequest) {
       planTier: true,
       creditsBalance: true,
       resumeAllotment: true,
-      subscriptions: {
-        select: { renewsOn: true, status: true, plan: true },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
+      renewsOn: true,
     },
   });
 
-  const planSlug =
-    organization?.planSlug ??
-    mapPlanSlug(organization?.planTier ?? organization?.subscriptions?.[0]?.plan) ??
-    "free";
+  const planSlug = organization?.planSlug ?? mapPlanSlug(organization?.planTier) ?? "free";
   const pricingPlan = planSlug
     ? await prisma.pricingPlan.findUnique({ where: { slug: planSlug } })
     : null;
@@ -73,7 +61,7 @@ export async function GET(request: NextRequest) {
   const remaining = organization?.creditsBalance ?? total ?? 0;
   const used = Math.max(0, total - remaining);
   const planName = pricingPlan?.name ?? organization?.planTier ?? "Plan";
-  const renewsOn = organization?.subscriptions?.[0]?.renewsOn ?? null;
+  const renewsOn = organization?.renewsOn ?? null;
 
   return NextResponse.json({
     remaining,

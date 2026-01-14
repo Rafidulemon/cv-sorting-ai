@@ -19,7 +19,15 @@ export default function ChangePasswordModal({ open, onClose }: ChangePasswordMod
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setIsSaving(false);
+      setError("");
+      setSuccess("");
+      return;
+    }
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     setError("");

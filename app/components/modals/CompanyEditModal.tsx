@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { AlertTriangle, Building2, Globe2, Mail, ShieldCheck, X } from "lucide-react";
@@ -9,17 +9,29 @@ import TextInput from "@/app/components/inputs/TextInput";
 import type { CompanyForm } from "@/app/types/company";
 
 const defaultLogo = "/logo/carriastic_logo.png";
+const logoBaseUrl = (process.env.NEXT_PUBLIC_S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+
+const resolveLogo = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return defaultLogo;
+  if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("/")) return trimmed;
+  const normalized = trimmed.replace(/^\/+/, "");
+  return logoBaseUrl ? `${logoBaseUrl}/${normalized}` : `/${normalized}`;
+};
 
 type CompanyEditModalProps = {
   open: boolean;
   onClose: () => void;
   form: CompanyForm;
   onChange: (key: keyof CompanyForm) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onLogoSelect: (file: File) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onReset: () => void;
   isSaving: boolean;
   loading: boolean;
   saveError?: string;
+  logoPreview: string;
+  isLogoPending: boolean;
 };
 
 type SectionProps = {
@@ -49,12 +61,18 @@ export function CompanyEditModal({
   onClose,
   form,
   onChange,
+  onLogoSelect,
   onSubmit,
   onReset,
   isSaving,
   loading,
   saveError,
+  logoPreview,
+  isLogoPending,
 }: CompanyEditModalProps) {
+  const [logoError, setLogoError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
@@ -64,7 +82,29 @@ export function CompanyEditModal({
     };
   }, [open]);
 
-  const logoPreview = form.logo?.trim() ? form.logo : defaultLogo;
+  useEffect(() => {
+    if (!open) {
+      setLogoError("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }, [open]);
+
+  const handleLogoPick = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setLogoError("");
+    if (!file.type.startsWith("image/")) {
+      setLogoError("Please upload an image file (PNG, JPG, WebP, or SVG).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoError("Logo must be 5MB or smaller.");
+      return;
+    }
+    onLogoSelect(file);
+  };
 
   if (typeof document === "undefined") return null;
 
@@ -118,6 +158,50 @@ export function CompanyEditModal({
               </div>
             ) : null}
 
+            <div className="rounded-3xl border border-white/80 bg-white/90 p-4 shadow-card-soft">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-[#EEF2F7] bg-[#f8fafc]">
+                    <Image
+                      src={logoPreview}
+                      alt="Company logo preview"
+                      fill
+                      sizes="64px"
+                      className="object-contain p-2"
+                      onError={() => setLogoError("Unable to preview logo.")}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-[#1f2a44]">Workspace logo</p>
+                    <p className="text-xs text-[#6b7280]">
+                      Shown at the top of your workspace and on invoices. Upload is saved when you click “Save company
+                      profile”.
+                    </p>
+                    {logoError ? <p className="text-xs font-semibold text-danger-600">{logoError}</p> : null}
+                    {isLogoPending ? <p className="text-[11px] font-semibold text-primary-700">Pending upload</p> : null}
+                  </div>
+                </div>
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={handleLogoPick}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={loading || isSaving}
+                  >
+                    Choose logo
+                  </Button>
+                  <p className="text-[11px] text-[#6b7280]">PNG, JPG, WebP, or SVG · Max 5MB. Upload on save.</p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="space-y-5">
                 <SectionCard
@@ -162,31 +246,6 @@ export function CompanyEditModal({
                     />
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                    <TextInput
-                      label="Logo URL"
-                      value={form.logo}
-                      onChange={onChange("logo")}
-                      helperText="Leave empty to use the default carriX logo."
-                      disabled={loading}
-                    />
-                    <div className="flex items-center gap-3 rounded-2xl border border-white/80 bg-white px-3 py-2 shadow-card-soft">
-                      <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[#EEF2F7] bg-[#f8fafc]">
-                        <Image
-                          src={logoPreview}
-                          alt="Company logo preview"
-                          fill
-                          sizes="56px"
-                          className="object-contain"
-                        />
-                      </div>
-                      <div className="leading-tight">
-                        <p className="text-xs font-semibold text-[#1f2a44]">Logo preview</p>
-                        <p className="text-[11px] text-[#6b7280]">Defaults to carriX if blank.</p>
-                      </div>
-                    </div>
-                  </div>
-
                   <TextArea
                     label="About the company"
                     value={form.description}
@@ -227,20 +286,32 @@ export function CompanyEditModal({
                   helper="Where invoices and alerts are sent."
                 >
                   <TextInput
-                    label="Billing email"
-                    value={form.billingEmail}
-                    onChange={onChange("billingEmail")}
+                    label="Company email"
+                    value={form.companyEmail}
+                    onChange={onChange("companyEmail")}
                     type="email"
                     isRequired
+                    helperText="Used for official workspace communication."
                     disabled={loading}
                   />
-                  <TextInput
-                    label="Phone"
-                    value={form.phone}
-                    onChange={onChange("phone")}
-                    type="tel"
-                    disabled={loading}
-                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <TextInput
+                      label="Billing email"
+                      value={form.billingEmail}
+                      onChange={onChange("billingEmail")}
+                      type="email"
+                      isRequired
+                      disabled={loading}
+                    />
+                    <TextInput
+                      label="Phone"
+                      value={form.phone}
+                      onChange={onChange("phone")}
+                      type="tel"
+                      helperText="Main company contact number."
+                      disabled={loading}
+                    />
+                  </div>
                 </SectionCard>
 
                 <SectionCard
@@ -258,7 +329,13 @@ export function CompanyEditModal({
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={onReset}
+                    onClick={() => {
+                      setLogoError("");
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                      }
+                      onReset();
+                    }}
                     disabled={loading || isSaving}
                   >
                     Reset changes

@@ -22,7 +22,7 @@ const providers: Provider[] = [
 
       const user = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, email: true, name: true, passwordHash: true, image: true },
+        select: { id: true, email: true, name: true, passwordHash: true, image: true, role: true, defaultOrgId: true },
       });
 
       if (!user?.passwordHash) return null;
@@ -30,19 +30,13 @@ const providers: Provider[] = [
       const isValid = await bcrypt.compare(password, user.passwordHash);
       if (!isValid) return null;
 
-      const membership = await prisma.membership.findFirst({
-        where: { userId: user.id },
-        orderBy: { createdAt: "asc" },
-        select: { role: true, organizationId: true },
-      });
-
       return {
         id: user.id,
         email: user.email ?? undefined,
         name: user.name ?? undefined,
         image: user.image ?? undefined,
-        role: membership?.role ?? null,
-        organizationId: membership?.organizationId ?? null,
+        role: user.role ?? null,
+        organizationId: user.defaultOrgId ?? null,
       };
     },
   }) as Provider,

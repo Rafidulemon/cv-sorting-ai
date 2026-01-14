@@ -124,6 +124,35 @@ export function buildSignupCompleteEmail(params: {
   return { subject, html, text };
 }
 
+export function buildPasswordResetEmail(params: { name?: string | null; resetUrl: string; expiresAt: Date }) {
+  const subject = "Reset your carriX password";
+  const greeting = params.name?.trim().length ? `Hi ${params.name},` : "Hi there,";
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#0f172a;background:#f8fafc;">
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:20px 22px;">
+        <p style="color:#0f172a;font-size:15px;margin:0 0 8px;">${greeting}</p>
+        <h2 style="color:#0f172a;margin:0 0 12px;font-size:20px;">Reset your password</h2>
+        <p style="color:#334155;font-size:14px;line-height:1.6;margin:0 0 14px;">
+          We received a request to reset your carriX password. Click the button below to choose a new one. If you didn&apos;t make this request, you can safely ignore this email.
+        </p>
+        <div style="margin:18px 0;">
+          <a href="${params.resetUrl}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#f8fafc;text-decoration:none;border-radius:10px;font-weight:700;">
+            Reset password
+          </a>
+        </div>
+        <p style="color:#475569;margin:0 0 6px;font-size:13px;">This link expires on ${formatDate(params.expiresAt)}.</p>
+        <p style="color:#475569;margin:0;font-size:13px;">If the button doesn&apos;t work, copy and paste this URL into your browser:</p>
+        <p style="color:#2563eb;margin:6px 0 0;font-size:13px;word-break:break-all;">${params.resetUrl}</p>
+      </div>
+      <p style="color:#475569;font-size:12px;margin:14px 0 0;">${brand.footer}</p>
+    </div>
+  `;
+
+  const text = `${greeting}\n\nWe received a request to reset your carriX password. Use the link below to set a new one. If you didn't request this, you can ignore this email.\nLink: ${params.resetUrl}\nThis link expires on ${formatDate(params.expiresAt)}.\n\n${brand.footer}`;
+
+  return { subject, html, text };
+}
+
 export function buildMemberInvitationEmail(params: {
   inviteeEmail: string;
   inviterName?: string | null;
@@ -131,6 +160,7 @@ export function buildMemberInvitationEmail(params: {
   role: string;
   inviteUrl: string;
   expiresAt: Date;
+  note?: string;
 }) {
   const subject = `Invitation to join ${params.organizationName} on carriX`;
   const greeting = "Hello,";
@@ -145,6 +175,17 @@ export function buildMemberInvitationEmail(params: {
         <p style="color:#334155;font-size:14px;line-height:1.6;margin:0 0 12px;">
           ${params.inviterName ?? "A workspace owner"} has invited you to join <strong>${params.organizationName}</strong> on carriX as a <strong>${roleLabel}</strong>.
         </p>
+        ${
+          params.note && params.note.trim().length
+            ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin:12px 0;">
+                 <p style="color:#0f172a;font-size:13px;font-weight:700;margin:0 0 6px;">Note from the inviter</p>
+                 <p style="color:#334155;font-size:13px;line-height:1.5;margin:0;">${params.note
+                   .trim()
+                   .replace(/</g, "&lt;")
+                   .replace(/>/g, "&gt;")}</p>
+               </div>`
+            : ""
+        }
         <div style="margin:16px 0;">
           <a href="${params.inviteUrl}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#f8fafc;text-decoration:none;border-radius:10px;font-weight:700;">
             Accept invitation
@@ -156,7 +197,16 @@ export function buildMemberInvitationEmail(params: {
     </div>
   `;
 
-  const text = `${greeting}\n\n${params.inviterName ?? "A workspace owner"} invited you to join ${params.organizationName} as ${roleLabel}.\nLink: ${params.inviteUrl}\nThis link expires on ${formatDate(params.expiresAt)}.\n\n${brand.footer}`;
+  const noteBlock =
+    params.note && params.note.trim().length
+      ? `\n\nNote from inviter:\n${params.note.trim()}`
+      : "";
+
+  const text = `${greeting}\n\n${params.inviterName ?? "A workspace owner"} invited you to join ${
+    params.organizationName
+  } as ${roleLabel}.${noteBlock}\nLink: ${params.inviteUrl}\nThis link expires on ${formatDate(
+    params.expiresAt,
+  )}.\n\n${brand.footer}`;
 
   return { subject, html, text };
 }

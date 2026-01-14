@@ -11,21 +11,42 @@ const acceptSchema = z.object({
   token: z.string().min(10, "Invitation token is required"),
   name: z.string().trim().min(2, "Name is required").max(140),
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
+  designation: z.string().trim().max(140).optional().or(z.literal("")),
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
 });
 
 async function getInvitationWithContext(token: string) {
   const invitation = await prisma.invitation.findUnique({
     where: { token },
     include: {
-      organization: { select: { id: true, name: true, seatLimit: true } },
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          seatLimit: true,
+          website: true,
+          domain: true,
+          phone: true,
+          size: true,
+          companyEmail: true,
+        },
+      },
       invitedBy: { select: { name: true } },
     },
   });
 
   if (!invitation) return null;
 
-  const memberCount = await prisma.membership.count({
-    where: { organizationId: invitation.organizationId, status: { not: "DISABLED" } },
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      email: invitation.email.toLowerCase(),
+      defaultOrgId: invitation.organizationId,
+    },
+    select: { name: true },
+  });
+
+  const memberCount = await prisma.user.count({
+    where: { defaultOrgId: invitation.organizationId, profileStatus: { not: "DISABLED" as any } },
   });
 
   const pendingInvitesCount = await prisma.invitation.count({
@@ -42,7 +63,7 @@ async function getInvitationWithContext(token: string) {
       ? Math.max(invitation.organization.seatLimit - memberCount - pendingInvitesCount, 0)
       : null;
 
-  return { invitation, seatsRemaining, memberCount, pendingInvitesCount };
+  return { invitation, seatsRemaining, memberCount, pendingInvitesCount, inviteeName: existingUser?.name ?? null };
 }
 
 export async function GET(request: NextRequest) {
@@ -56,7 +77,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
   }
 
-  const { invitation, seatsRemaining } = data;
+  const { invitation, seatsRemaining, inviteeName } = data;
   const now = new Date();
 
   if (invitation.acceptedAt) {
@@ -79,8 +100,17 @@ export async function GET(request: NextRequest) {
       email: invitation.email,
       role: invitation.role,
       organizationName: invitation.organization.name,
+      organization: {
+        name: invitation.organization.name,
+        website: invitation.organization.website,
+        domain: invitation.organization.domain,
+        phone: invitation.organization.phone,
+        size: invitation.organization.size,
+        companyEmail: invitation.organization.companyEmail,
+      },
       inviterName: invitation.invitedBy?.name ?? null,
       expiresAt: invitation.expiresAt.toISOString(),
+      name: inviteeName ?? "",
       seatsRemaining,
     },
   });
@@ -99,7 +129,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid details", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { token, name, password } = parsed.data;
+  const { token, name, password, designation, phone } = parsed.data;
   const data = await getInvitationWithContext(token);
 
   if (!data) {
@@ -128,40 +158,56 @@ export async function POST(request: NextRequest) {
 
   const existingUser = await prisma.user.findUnique({
     where: { email: invitation.email.toLowerCase() },
-    select: { id: true, email: true, defaultOrgId: true },
+    select: {
+      id: true,
+      email: true,
+      defaultOrgId: true,
+      role: true,
+      profileStatus: true,
+      name: true,
+      designation: true,
+      phone: true,
+    },
   });
 
-  const membershipExists = existingUser
-    ? await prisma.membership.findFirst({
-        where: { userId: existingUser.id, organizationId: invitation.organizationId },
-      })
-    : null;
-
-  if (membershipExists) {
-    return NextResponse.json({ error: "This email is already part of the workspace." }, { status: 409 });
+  if (existingUser && existingUser.defaultOrgId && existingUser.defaultOrgId !== invitation.organizationId) {
+    return NextResponse.json(
+      { error: "This user already belongs to another workspace. Please contact support to switch." },
+      { status: 409 },
+    );
   }
 
   const result = await prisma.$transaction(async (tx) => {
     const user =
-      existingUser ??
-      (await tx.user.create({
-        data: {
-          name,
-          email: invitation.email.toLowerCase(),
-          passwordHash,
-          emailVerified: new Date(),
-        },
-      }));
-
-    const membership = await tx.membership.create({
-      data: {
-        userId: user.id,
-        organizationId: invitation.organizationId,
-        role: invitation.role,
-        status: "ACTIVE",
-        lastActiveAt: new Date(),
-      },
-    });
+      existingUser
+        ? await tx.user.update({
+            where: { id: existingUser.id },
+            data: {
+              name,
+              passwordHash,
+              emailVerified: new Date(),
+              defaultOrgId: existingUser.defaultOrgId ?? invitation.organizationId,
+              role: invitation.role,
+              profileStatus: "ACTIVE",
+              designation: designation?.trim() || existingUser.designation || null,
+              phone: phone?.trim() || existingUser.phone || null,
+              startedAt: new Date(),
+            },
+          })
+        : await tx.user.create({
+            data: {
+              name,
+              email: invitation.email.toLowerCase(),
+              passwordHash,
+              emailVerified: new Date(),
+              defaultOrgId: invitation.organizationId,
+              role: invitation.role,
+              profileStatus: "ACTIVE",
+              designation: designation?.trim() || null,
+              phone: phone?.trim() || null,
+              startedAt: new Date(),
+            },
+          });
 
     await tx.invitation.update({
       where: { id: invitation.id },
@@ -175,7 +221,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return { user, membership };
+    return { user };
   });
 
   try {
@@ -202,6 +248,6 @@ export async function POST(request: NextRequest) {
       id: invitation.organizationId,
       name: invitation.organization.name,
     },
-    memberId: result.membership.id,
+    memberId: result.user.id,
   });
 }

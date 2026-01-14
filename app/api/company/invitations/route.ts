@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { z } from "zod";
 import crypto from "crypto";
+import { MembershipStatus, UserRole } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 import { assertMailerConfig, sendEmail } from "@/app/lib/mailer";
 import { buildMemberInvitationEmail } from "@/app/lib/emailTemplates";
@@ -12,6 +13,10 @@ export const dynamic = "force-dynamic";
 const inviteSchema = z.object({
   emails: z.array(z.string().trim().email("Invite email is invalid")).min(1, "At least one email is required"),
   role: z.enum(["COMPANY_ADMIN", "COMPANY_MEMBER", "VIEWER"]).default("COMPANY_MEMBER"),
+  note: z.string().trim().max(500).optional(),
+  name: z.string().trim().min(2, "Name is required").max(140),
+  designation: z.string().trim().max(140).optional().or(z.literal("")),
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
 });
 
 async function getContext(request: NextRequest) {
@@ -26,16 +31,15 @@ async function getContext(request: NextRequest) {
 
   if (!userId) return { userId: null, organizationId: null, membershipRole: null };
 
-  const membership = await prisma.membership.findFirst({
-    where: tokenOrgId ? { userId, organizationId: tokenOrgId } : { userId },
-    orderBy: { createdAt: "asc" },
-    select: { organizationId: true, role: true, userId: true },
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { defaultOrgId: true, role: true },
   });
 
   return {
     userId,
-    organizationId: tokenOrgId ?? membership?.organizationId ?? null,
-    membershipRole: membership?.role ?? null,
+    organizationId: tokenOrgId ?? user?.defaultOrgId ?? null,
+    membershipRole: user?.role ?? null,
   };
 }
 
@@ -66,6 +70,9 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid invite details", details: parsed.error.flatten() }, { status: 400 });
   }
+  if (parsed.data.emails.length > 1) {
+    return NextResponse.json({ error: "You can invite only one teammate at a time." }, { status: 400 });
+  }
 
   const normalizedEmails = Array.from(
     new Set(parsed.data.emails.map((email) => email.toLowerCase().trim()).filter((email) => email.length)),
@@ -84,8 +91,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  const memberCount = await prisma.membership.count({
-    where: { organizationId: organization.id, status: { not: "DISABLED" } },
+  const memberCount = await prisma.user.count({
+    where: { defaultOrgId: organization.id, profileStatus: { not: "DISABLED" as any } },
   });
 
   const pendingInvitesCount = await prisma.invitation.count({
@@ -109,12 +116,17 @@ export async function POST(request: NextRequest) {
     where: { email: { in: normalizedEmails } },
     select: {
       email: true,
-      memberships: { where: { organizationId: organization.id }, select: { id: true } },
+      defaultOrgId: true,
+      id: true,
+      role: true,
+      profileStatus: true,
     },
   });
 
   const existingMemberEmails = new Set(
-    existingUsers.filter((user) => user.memberships.length > 0).map((user) => user.email?.toLowerCase() ?? ""),
+    existingUsers
+      .filter((user) => user.defaultOrgId === organization.id)
+      .map((user) => user.email?.toLowerCase() ?? ""),
   );
 
   const existingInvites = await prisma.invitation.findMany({
@@ -132,9 +144,10 @@ export async function POST(request: NextRequest) {
   const emailsToInvite = normalizedEmails.filter(
     (email) => !existingMemberEmails.has(email) && !existingInviteEmails.has(email),
   );
+  const skippedEmails = normalizedEmails.filter((email) => !emailsToInvite.includes(email));
 
   if (!emailsToInvite.length) {
-    return NextResponse.json({ error: "All provided emails are already invited or members of this workspace." }, { status: 400 });
+    return NextResponse.json({ error: "Provided email is already invited or members of carriX." }, { status: 400 });
   }
 
   if (seatsRemaining !== null && emailsToInvite.length > seatsRemaining) {
@@ -150,6 +163,40 @@ export async function POST(request: NextRequest) {
   const invites = await prisma.$transaction(async (tx) => {
     const records = [];
     for (const email of emailsToInvite) {
+      const existingUser = existingUsers.find((user) => user.email?.toLowerCase() === email);
+
+      if (existingUser && existingUser.defaultOrgId && existingUser.defaultOrgId !== organization.id) {
+        throw new Error("This user already belongs to another workspace. Please use a different email.");
+      }
+
+      const user =
+        existingUser ??
+        (await tx.user.create({
+          data: {
+            email,
+            name: parsed.data.name.trim(),
+            designation: parsed.data.designation?.trim() || null,
+            phone: parsed.data.phone?.trim() || null,
+            role: parsed.data.role as UserRole,
+            profileStatus: MembershipStatus.PENDING,
+            defaultOrgId: organization.id,
+          },
+        }));
+
+      if (existingUser) {
+        await tx.user.update({
+          where: { id: existingUser.id },
+          data: {
+            name: parsed.data.name.trim(),
+            designation: parsed.data.designation?.trim() || null,
+            phone: parsed.data.phone?.trim() || null,
+            role: parsed.data.role as UserRole,
+            profileStatus: MembershipStatus.PENDING,
+            defaultOrgId: organization.id,
+          },
+        });
+      }
+
       const record = await tx.invitation.create({
         data: {
           organizationId: organization.id,
@@ -176,6 +223,7 @@ export async function POST(request: NextRequest) {
       role: invite.role,
       inviteUrl: inviteUrl.toString(),
       expiresAt: invite.expiresAt,
+      note: parsed.data.note?.trim() || "",
     });
 
     return sendEmail({
@@ -199,5 +247,6 @@ export async function POST(request: NextRequest) {
     success: true,
     sent: invites.length,
     seatsRemaining: remainingAfter,
+    skipped: skippedEmails,
   });
 }

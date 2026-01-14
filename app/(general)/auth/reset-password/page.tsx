@@ -1,11 +1,122 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, KeyRound, ShieldCheck, Sparkles } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
 import PasswordInput from "@/app/components/inputs/PasswordInput";
 
+type ResetStatus = "checking" | "ready" | "invalid" | "completed";
+
 export default function ResetPasswordPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const token = searchParams.get("token") ?? "";
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [status, setStatus] = useState<ResetStatus>("checking");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [emailHint, setEmailHint] = useState("");
+  const [name, setName] = useState("");
+  const [isPending, setIsPending] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token) {
+      setError("Reset link is missing or invalid.");
+      setStatus("invalid");
+      return;
+    }
+
+    const validateToken = async () => {
+      setStatus("checking");
+      setError("");
+      setSuccess("");
+      try {
+        const response = await fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}`, { cache: "no-store" });
+        const raw = await response.text();
+        const data = raw ? JSON.parse(raw) : {};
+
+        if (!response.ok) {
+          const message = data?.error ?? response.statusText ?? "This reset link is invalid or has expired.";
+          throw new Error(message);
+        }
+
+        if (cancelled) return;
+
+        setEmailHint(typeof data?.email === "string" ? data.email : "");
+        setName(typeof data?.name === "string" ? data.name : "");
+        setStatus("ready");
+      } catch (tokenError) {
+        if (cancelled) return;
+        setError((tokenError as Error)?.message ?? "This reset link is invalid or has expired.");
+        setStatus("invalid");
+      }
+    };
+
+    validateToken();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (status !== "ready") return;
+
+    setError("");
+    setSuccess("");
+
+    if (password.trim().length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setIsPending(true);
+
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const raw = await response.text();
+      const data = raw ? JSON.parse(raw) : {};
+
+      if (!response.ok) {
+        const message = data?.error ?? response.statusText ?? "Unable to reset password right now.";
+        throw new Error(message);
+      }
+
+      setStatus("completed");
+      setSuccess("Password updated. You can now log in with your new credentials.");
+      setPassword("");
+      setConfirmPassword("");
+    } catch (submitError) {
+      setError((submitError as Error)?.message ?? "Unable to reset password right now.");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const isDisabled = status !== "ready" || isPending;
+
+  useEffect(() => {
+    if (status !== "completed") return;
+    const timer = setTimeout(() => {
+      router.push("/auth/login");
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [status, router]);
+
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-white via-[#fef5ff] to-[#eef4ff]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_500px_at_10%_20%,rgba(216,8,128,0.08),transparent),radial-gradient(700px_400px_at_90%_10%,rgba(59,130,246,0.12),transparent)]" />
@@ -78,16 +189,39 @@ export default function ResetPasswordPage() {
 
               <form
                 className="mt-8 space-y-6"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                }}
+                onSubmit={handleSubmit}
               >
+                {status === "checking" ? (
+                  <div className="rounded-xl border border-primary-100 bg-primary-50/70 px-4 py-3 text-sm font-semibold text-primary-800">
+                    Validating reset link…
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="rounded-xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-700">
+                    {error}
+                  </div>
+                ) : null}
+                {success ? (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                    {success}
+                  </div>
+                ) : null}
+                {status === "ready" && (emailHint || name) ? (
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-600">
+                    Resetting access for {name || "your account"}
+                    {emailHint ? ` (${emailHint})` : ""}.
+                  </div>
+                ) : null}
+
                 <PasswordInput
                   label="New password"
                   name="password"
                   placeholder="Create a strong password"
                   autoComplete="new-password"
                   isRequired
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  disabled={isDisabled}
                 />
                 <PasswordInput
                   label="Confirm password"
@@ -95,6 +229,9 @@ export default function ResetPasswordPage() {
                   placeholder="Re-enter your new password"
                   autoComplete="new-password"
                   isRequired
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  disabled={isDisabled}
                 />
 
                 <div className="flex items-start gap-3 rounded-2xl bg-primary-50/70 p-3 text-xs text-primary-800">
@@ -107,8 +244,8 @@ export default function ResetPasswordPage() {
                   </div>
                 </div>
 
-                <Button type="submit" fullWidth rightIcon={<ArrowRight className="h-4 w-4" />}>
-                  Save new password
+                <Button type="submit" fullWidth rightIcon={<ArrowRight className="h-4 w-4" />} disabled={isDisabled}>
+                  {status === "completed" ? "Password updated" : isPending ? "Saving..." : "Save new password"}
                 </Button>
               </form>
 

@@ -1,13 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition, type ChangeEvent, type FormEvent, type ComponentType, type SVGProps } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type ChangeEvent,
+  type FormEvent,
+  type ComponentType,
+  type SVGProps,
+} from "react";
 import { ArrowRight, BadgeCheck, BarChart3, CheckCircle2, CreditCard, Loader2, Mail, Users } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
 import EmailInput from "@/app/components/inputs/EmailInput";
 import PasswordInput from "@/app/components/inputs/PasswordInput";
 import TextInput from "@/app/components/inputs/TextInput";
 import SelectBox from "@/app/components/inputs/SelectBox";
+import TextArea from "@/app/components/inputs/TextArea";
 
 type Highlight = {
   title: string;
@@ -95,35 +107,125 @@ function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
 
 type FormState = {
   name: string;
-  email: string;
+  personalEmail: string;
+  companyEmail: string;
+  companyPhone: string;
   password: string;
+  phone: string;
   company: string;
-  role: string;
-  teamSize: string;
+  companySlug: string;
+  website: string;
+  domain: string;
+  industry: string;
+  description: string;
+  address: string;
+  region: string;
+  billingEmail: string;
+  designation: string;
+  companySize: string;
   preferredPlan: string;
+  logoKey: string;
+  logoUrl: string;
 };
 
 export default function SignUpPage() {
+  const router = useRouter();
+  const { status, data: session } = useSession();
+  useEffect(() => {
+    if (status === "authenticated") {
+      const role = (session?.user as any)?.role;
+      router.replace(role === "SUPER_ADMIN" ? "/admin" : "/dashboard");
+    }
+  }, [status, session, router]);
+
   const [form, setForm] = useState<FormState>({
     name: "",
-    email: "",
+    personalEmail: "",
+    companyEmail: "",
+    companyPhone: "",
     password: "",
+    phone: "",
     company: "",
-    role: "",
-    teamSize: "",
+    companySlug: "",
+    website: "",
+    domain: "",
+    industry: "",
+    description: "",
+    address: "",
+    region: "",
+    billingEmail: "",
+    designation: "",
+    companySize: "",
     preferredPlan: "standard",
+    logoKey: "",
+    logoUrl: "",
   });
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [serverMessage, setServerMessage] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const [sent, setSent] = useState(false);
+  const [billingEmailTouched, setBillingEmailTouched] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!billingEmailTouched) {
+      setForm((prev) => ({ ...prev, billingEmail: prev.companyEmail }));
+    }
+  }, [billingEmailTouched, form.companyEmail]);
 
   const handleChange =
     (key: keyof FormState) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const value = event.target.value;
+      if (key === "billingEmail") {
+        setBillingEmailTouched(true);
+      }
       setForm((prev) => ({ ...prev, [key]: value }));
     };
+
+  const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setLogoError("");
+    if (!file.type.startsWith("image/")) {
+      setLogoError("Please upload an image file (PNG, JPG, or WebP).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoError("Logo must be 5MB or smaller.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("fileName", file.name);
+    formData.append("contentType", file.type);
+
+    setLogoUploading(true);
+    try {
+      const response = await fetch("/api/jobs/upload-url?purpose=company-logo", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Unable to upload logo right now.");
+      }
+      const publicUrl = payload?.publicUrl ?? "";
+      const logoKey = payload?.key ?? "";
+      setForm((prev) => ({ ...prev, logoUrl: publicUrl, logoKey }));
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (err) {
+      console.error(err);
+      setLogoError(err instanceof Error ? err.message : "Unable to upload logo right now.");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -136,26 +238,42 @@ export default function SignUpPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: form.name,
-            email: form.email,
+            personalEmail: form.personalEmail,
+            companyEmail: form.companyEmail,
             password: form.password,
+            phone: form.phone,
             companyName: form.company,
-            role: form.role,
-            teamSize: form.teamSize,
+            companySlug: form.companySlug,
+            website: form.website,
+            domain: form.domain,
+            industry: form.industry,
+            description: form.description,
+            address: form.address,
+            region: form.region,
+            billingEmail: form.billingEmail || form.companyEmail,
+            logoKey: form.logoKey,
+            logoUrl: form.logoUrl,
+            designation: form.designation,
+            companySize: form.companySize,
+            companyPhone: form.companyPhone,
             preferredPlan: form.preferredPlan,
           }),
         });
 
         const payload = await response.json();
         if (!response.ok) {
-          throw new Error(payload?.error ?? "Unable to start signup right now.");
+          const message = payload?.error ?? "Unable to start signup right now.";
+          setError(message);
+          return;
         }
 
         setSent(true);
-        setSubmittedEmail(form.email);
+        setSubmittedEmail(form.personalEmail);
         setServerMessage(payload?.message ?? "Confirmation email sent.");
       } catch (err) {
-        console.error(err);
-        setError(err instanceof Error ? err.message : "Unable to start signup right now.");
+        const message =
+          err instanceof Error ? err.message : "Unable to start signup right now. Please try again in a moment.";
+        setError(message);
       }
     });
   };
@@ -165,10 +283,10 @@ export default function SignUpPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_500px_at_10%_20%,rgba(216,8,128,0.08),transparent),radial-gradient(800px_420px_at_90%_12%,rgba(59,130,246,0.12),transparent)]" />
 
       <div className="relative mx-auto max-w-6xl px-6 pt-28 pb-20">
-        <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
           <div className="relative overflow-hidden rounded-3xl border border-white/30 bg-gradient-to-br from-[#1c0e2a] via-[#2d1744] to-[#0f1b35] p-10 text-white shadow-card-soft">
             <div className="absolute inset-0 bg-[radial-gradient(900px_320px_at_25%_20%,rgba(216,8,128,0.22),transparent),radial-gradient(800px_420px_at_80%_12%,rgba(124,58,237,0.35),transparent)]" />
-            <div className="relative space-y-6">
+            <div className="relative space-y-6 text-left">
               <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
                 Create account
               </span>
@@ -277,15 +395,53 @@ export default function SignUpPage() {
                       isRequired
                     />
                     <EmailInput
-                      label="Work email"
-                      name="email"
-                      placeholder="you@company.com"
+                      label="Personal email (for login)"
+                      name="personalEmail"
+                      placeholder="you@example.com"
                       autoComplete="email"
-                      value={form.email}
-                      onChange={handleChange("email")}
+                      value={form.personalEmail}
+                      onChange={handleChange("personalEmail")}
                       isRequired
                     />
                   </div>
+
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <EmailInput
+                      label="Company email"
+                      name="companyEmail"
+                  placeholder="you@company.com"
+                  autoComplete="work"
+                  value={form.companyEmail}
+                  onChange={handleChange("companyEmail")}
+                  isRequired
+                />
+                <TextInput
+                  label="Personal phone (optional)"
+                  name="phone"
+                  placeholder="+880 1700 123 456"
+                  autoComplete="tel"
+                  value={form.phone}
+                  onChange={handleChange("phone")}
+                    />
+                  </div>
+
+                  <div className="grid gap-5 sm:grid-cols-2">
+                <TextInput
+                  label="Company phone (optional)"
+                  name="companyPhone"
+                  placeholder="+880 1700 123 456"
+                  value={form.companyPhone}
+                  onChange={handleChange("companyPhone")}
+                />
+                <TextInput
+                  label="Company slug (optional)"
+                  name="companySlug"
+                  placeholder="acme-hiring"
+                  value={form.companySlug}
+                  onChange={handleChange("companySlug")}
+                  helperText="Used for your workspace URL if available"
+                />
+              </div>
 
                   <PasswordInput
                     label="Password"
@@ -301,34 +457,68 @@ export default function SignUpPage() {
                     <TextInput
                       label="Company"
                       name="company"
-                      placeholder="Acme Corp"
-                      autoComplete="organization"
-                      value={form.company}
-                      onChange={handleChange("company")}
-                      isRequired
+                  placeholder="Acme Corp"
+                  autoComplete="organization"
+                  value={form.company}
+                  onChange={handleChange("company")}
+                  isRequired
+                />
+                <TextInput
+                  label="Designation"
+                  name="designation"
+                  placeholder="Head of Talent"
+                  autoComplete="organization-title"
+                  value={form.designation}
+                  onChange={handleChange("designation")}
+                />
+              </div>
+
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <TextInput
+                      label="Website (optional)"
+                      name="website"
+                      placeholder="https://company.com"
+                      value={form.website}
+                      onChange={handleChange("website")}
                     />
                     <TextInput
-                      label="Role"
-                      name="role"
-                      placeholder="Head of Talent"
-                      autoComplete="organization-title"
-                      value={form.role}
-                      onChange={handleChange("role")}
+                      label="Domain (optional)"
+                      name="domain"
+                      placeholder="company.com"
+                      value={form.domain}
+                      onChange={handleChange("domain")}
                     />
                   </div>
 
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <SelectBox
-                      label="Team size"
-                      name="teamSize"
-                      placeholder="Select team size"
-                      value={form.teamSize}
-                      onChange={handleChange("teamSize")}
-                      options={[
-                        { value: "1-10", label: "1 - 10 people" },
-                        { value: "11-50", label: "11 - 50 people" },
-                        { value: "51-200", label: "51 - 200 people" },
-                        { value: "200+", label: "200+ people" },
+                    <TextInput
+                      label="Industry (optional)"
+                      name="industry"
+                      placeholder="HR Tech · AI"
+                      value={form.industry}
+                      onChange={handleChange("industry")}
+                    />
+                    <TextInput
+                      label="Region (optional)"
+                      name="region"
+                      placeholder="APAC"
+                  value={form.region}
+                  onChange={handleChange("region")}
+                />
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <SelectBox
+                  label="Company size"
+                  name="companySize"
+                  placeholder="Select company size"
+                  value={form.companySize}
+                  onChange={handleChange("companySize")}
+                  options={[
+                    { value: "1-10", label: "1 - 10 people" },
+                    { value: "11-50", label: "11 - 50 people" },
+                    { value: "51-200", label: "51 - 200 people" },
+                    { value: "200+", label: "200+ people" },
                       ]}
                     />
                     <SelectBox
@@ -342,6 +532,82 @@ export default function SignUpPage() {
                         { value: "premium", label: "Premium · 10 seats · BDT 15,000" },
                       ]}
                     />
+                  </div>
+
+                  <TextArea
+                    label="Company description (optional)"
+                    name="description"
+                    placeholder="AI-first hiring suite powering resume scoring, shortlist recommendations, and recruiter workflows."
+                    value={form.description}
+                    onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+                    rows={4}
+                  />
+
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <TextInput
+                      label="Billing email"
+                      name="billingEmail"
+                      placeholder="billing@company.com"
+                      value={form.billingEmail || form.companyEmail}
+                      onChange={handleChange("billingEmail")}
+                      isRequired
+                    />
+                    <TextInput
+                      label="Address"
+                      name="address"
+                      placeholder="123 Main Street, City"
+                      value={form.address}
+                      onChange={handleChange("address")}
+                      isRequired
+                    />
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-900">Company logo (optional)</p>
+                        <p className="text-xs text-zinc-600">Images only. Max 5MB.</p>
+                      </div>
+                      {form.logoUrl ? (
+                        <span className="text-xs font-semibold text-green-700">Uploaded</span>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        {form.logoUrl ? (
+                          <img src={form.logoUrl} alt="Company logo preview" className="h-14 w-14 rounded-lg object-cover" />
+                        ) : (
+                          <span className="grid h-14 w-14 place-items-center rounded-lg border border-dashed border-zinc-300 text-zinc-400">
+                            <Mail className="h-5 w-5" />
+                          </span>
+                        )}
+                        <div className="text-xs text-zinc-600">
+                          <p className="font-semibold text-zinc-800">Upload PNG, JPG, or WebP</p>
+                          <p>Used on invoices and your workspace.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          className="hidden"
+                          onChange={handleLogoUpload}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={logoUploading}
+                        >
+                          {logoUploading ? "Uploading…" : "Upload logo"}
+                        </Button>
+                      </div>
+                    </div>
+                    {logoError ? (
+                      <p className="mt-2 text-xs font-semibold text-amber-700">{logoError}</p>
+                    ) : null}
                   </div>
 
                   {error ? (

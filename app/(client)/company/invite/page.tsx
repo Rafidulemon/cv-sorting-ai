@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Mail, Plus, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Mail, Users } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
 import TextInput from "@/app/components/inputs/TextInput";
 import EmailInput from "@/app/components/inputs/EmailInput";
 import SelectBox from "@/app/components/inputs/SelectBox";
 
 export default function InviteMembersPage() {
-  const [emails, setEmails] = useState<string[]>([""]);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [phone, setPhone] = useState("");
   const [role, setRole] = useState("COMPANY_MEMBER");
+  const [note, setNote] = useState("");
   const [seatLimit, setSeatLimit] = useState<number | null>(null);
   const [seatsRemaining, setSeatsRemaining] = useState<number | null>(null);
   const [loadingSeats, setLoadingSeats] = useState(true);
@@ -54,20 +58,20 @@ export default function InviteMembersPage() {
     loadSeatData();
   }, []);
 
-  const addRow = () => setEmails((prev) => [...prev, ""]);
-  const updateRow = (index: number, value: string) =>
-    setEmails((prev) => prev.map((item, i) => (i === index ? value : item)));
-  const removeEmpty = () => setEmails((prev) => prev.filter((email) => email.trim().length));
-
   const sendInvites = async () => {
-    const cleaned = emails.map((email) => email.trim()).filter(Boolean);
-    if (!cleaned.length) {
-      setError("Please add at least one email address.");
+    const cleanedEmail = email.trim();
+    const cleanedName = name.trim();
+    if (!cleanedName.length) {
+      setError("Name is required.");
+      return;
+    }
+    if (!cleanedEmail.length) {
+      setError("Please add an email address.");
       return;
     }
 
-    if (seatsRemaining !== null && cleaned.length > seatsRemaining) {
-      setError(`You can invite up to ${seatsRemaining} more teammate(s) based on your plan.`);
+    if (seatsRemaining !== null && seatsRemaining <= 0) {
+      setError("Seat limit reached. Buy more seats or remove users before inviting new teammates.");
       return;
     }
 
@@ -78,18 +82,34 @@ export default function InviteMembersPage() {
       const response = await fetch("/api/company/invitations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: cleaned, role }),
+        body: JSON.stringify({
+          emails: [cleanedEmail],
+          role,
+          note,
+          name: cleanedName,
+          designation: designation.trim(),
+          phone: phone.trim(),
+        }),
       });
 
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Unable to send invitations right now.");
+        const message = payload?.error ?? "Unable to send invitations right now.";
+        setError(message);
+        return;
       }
 
-      setSuccess(`Invitations sent to ${cleaned.length} teammate${cleaned.length > 1 ? "s" : ""}.`);
+      const skipped: string[] = Array.isArray(payload?.skipped) ? payload.skipped : [];
+      const sentCount = Number(payload?.sent) || (skipped.length ? 0 : 1);
+      const skippedText = skipped.length ? ` Skipped: ${skipped.join(", ")}.` : "";
+      setSuccess(`Invitation sent to ${sentCount} teammate.${skippedText}`);
       const remaining = typeof payload?.seatsRemaining === "number" ? payload.seatsRemaining : seatsRemaining;
       setSeatsRemaining(remaining ?? seatsRemaining);
-      setEmails([""]);
+      setEmail("");
+      setName("");
+      setDesignation("");
+      setPhone("");
+      setNote("");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Unable to send invitations right now.");
@@ -102,6 +122,8 @@ export default function InviteMembersPage() {
     seatLimit !== null && seatsRemaining !== null
       ? `${seatsRemaining} of ${seatLimit} seats remaining`
       : "Seat availability syncing";
+
+  const cannotInvite = seatsRemaining !== null && seatsRemaining <= 0;
 
   return (
     <div className="space-y-8 rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card-soft text-[#1f2a44]">
@@ -129,43 +151,63 @@ export default function InviteMembersPage() {
       </div>
 
       <div className="space-y-6 rounded-2xl border border-[#EEF2F7] bg-white/90 p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
-            <SelectBox
-              label="Role"
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-              options={[
-                { label: "Company admin", value: "COMPANY_ADMIN" },
-                { label: "Member", value: "COMPANY_MEMBER" },
-                { label: "Viewer", value: "VIEWER" },
-              ]}
-            />
-            <TextInput
-              label="Add a note (optional)"
-              placeholder="Welcome aboard — here’s how we use carriX."
-              value=""
-              onChange={() => {}}
-              disabled
-            />
-          </div>
-          <Button type="button" variant="secondary" leftIcon={<Plus className="h-4 w-4" />} onClick={addRow}>
-            Add email
-          </Button>
+        <div className="grid gap-4 md:grid-cols-2 md:gap-5">
+          <SelectBox
+            label="Role"
+            value={role}
+            onChange={(event) => setRole(event.target.value)}
+            options={[
+              { label: "Company admin", value: "COMPANY_ADMIN" },
+              { label: "Member", value: "COMPANY_MEMBER" },
+              { label: "Viewer", value: "VIEWER" },
+            ]}
+          />
+          <TextInput
+            label="Add a note (optional)"
+            placeholder="Welcome aboard — here’s how we use carriX."
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+          />
         </div>
 
-        <div className="space-y-3">
-          {emails.map((email, index) => (
-            <EmailInput
-              key={`invite-${index}`}
-              label={index === 0 ? "Emails" : ""}
-              placeholder="teammate@company.com"
-              value={email}
-              onChange={(event) => updateRow(index, event.target.value)}
-              rightIcon={<Mail className="h-4 w-4 text-[#9aa0b5]" />}
-            />
-          ))}
+        <div className="grid gap-4 md:grid-cols-2 md:gap-5">
+          <TextInput
+            label="Full name"
+            placeholder="Teammate name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            isRequired
+          />
+          <TextInput
+            label="Designation (optional)"
+            placeholder="Product Manager"
+            value={designation}
+            onChange={(event) => setDesignation(event.target.value)}
+          />
         </div>
+
+        <div className="grid gap-4 md:grid-cols-2 md:gap-5">
+          <EmailInput
+            label="Email"
+            placeholder="teammate@company.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            rightIcon={<Mail className="h-4 w-4 text-[#9aa0b5]" />}
+          />
+          <TextInput
+            label="Phone (optional)"
+            placeholder="+880 1700 123 456"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        </div>
+
+        {cannotInvite ? (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <AlertTriangle className="h-4 w-4" />
+            <span>Seat limit reached. Buy more seats or remove users before inviting new teammates.</span>
+          </div>
+        ) : null}
 
         {error ? (
           <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -182,11 +224,13 @@ export default function InviteMembersPage() {
         ) : null}
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={removeEmpty} variant="secondary">
-            Clean empty rows
-          </Button>
-          <Button type="button" leftIcon={isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} onClick={sendInvites} disabled={isSending}>
-            {isSending ? "Sending…" : "Send invites"}
+          <Button
+            type="button"
+            leftIcon={isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            onClick={sendInvites}
+            disabled={isSending || cannotInvite}
+          >
+            {isSending ? "Sending…" : "Send invite"}
           </Button>
         </div>
       </div>

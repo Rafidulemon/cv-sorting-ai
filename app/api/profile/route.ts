@@ -13,16 +13,18 @@ const profileSelect = {
   email: true,
   image: true,
   phone: true,
-  title: true,
+  designation: true,
   team: true,
   timezone: true,
   profileStatus: true,
   startedAt: true,
+  lastLoginAt: true,
+  createdAt: true,
 } satisfies Parameters<typeof prisma.user.findUnique>[0]["select"];
 
 const profileUpdateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(140),
-  title: z.string().trim().max(140).optional().or(z.literal("")),
+  designation: z.string().trim().max(140).optional().or(z.literal("")),
   team: z.string().trim().max(140).optional().or(z.literal("")),
   phone: z.string().trim().max(80).optional().or(z.literal("")),
   timezone: z.string().trim().max(120).optional().or(z.literal("")),
@@ -35,11 +37,40 @@ const profileUpdateSchema = z.object({
     .refine(
       (value) => {
         if (!value?.length) return true;
-        return value.startsWith("http") || value.startsWith("/") || value.startsWith("data:");
+        if (value.startsWith("http") || value.startsWith("/") || value.startsWith("data:")) return true;
+        // Allow storage keys like uploads/profile-picture/... or uploads/company-logos/...
+        if (/^uploads\//.test(value)) return true;
+        return false;
       },
-      { message: "Image must be a URL or path" }
+      { message: "Image must be a URL, data URI, or storage key" }
     ),
 });
+
+function normalizeStorageKey(value?: string | null) {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+
+  const publicBase = (process.env.S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+  if (publicBase && trimmed.startsWith(publicBase)) {
+    return trimmed.slice(publicBase.length).replace(/^\/+/, "");
+  }
+
+  try {
+    const url = new URL(trimmed);
+    return url.pathname.replace(/^\/+/, "") || trimmed;
+  } catch {
+    return trimmed.replace(/^\/+/, "");
+  }
+}
+
+function buildPublicUrlFromKey(key?: string | null) {
+  const trimmed = key?.trim();
+  if (!trimmed?.length) return null;
+  if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("/")) return trimmed;
+  const publicBase = (process.env.S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+  return publicBase ? `${publicBase}/${trimmed}` : trimmed;
+}
 
 function toNullable(value?: string | null) {
   if (value === undefined) return undefined;
@@ -75,18 +106,20 @@ const getHandler = auth(async (request) => {
       orderBy: { updatedAt: "desc" },
     });
 
-    const membership = await prisma.membership.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "asc" },
-      select: { lastActiveAt: true, createdAt: true },
-    });
+    const membership = {
+      lastActiveAt: user?.lastLoginAt ?? null,
+      createdAt: user?.createdAt ?? null,
+    };
 
     const totalSorted = jobs.reduce((sum, job) => sum + (job.cvSortedCount ?? 0), 0);
     const totalAnalyzed = jobs.reduce((sum, job) => sum + (job.cvAnalyzedCount ?? 0), 0);
     const liveJobs = jobs.filter((job) => job.status === "ACTIVE").length;
 
+    const imageUrl = buildPublicUrlFromKey(user?.image);
+
     return NextResponse.json({
       user,
+      imageUrl,
       stats: {
         jobsCreated: jobs.length,
         liveJobs,
@@ -125,20 +158,22 @@ const updateHandler = auth(async (request) => {
 
     const data = parsed.data;
 
+    const imageKey = normalizeStorageKey(data.image);
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
         name: data.name.trim(),
-        title: toNullable(data.title),
+        designation: toNullable(data.designation),
         team: toNullable(data.team),
         phone: toNullable(data.phone),
         timezone: toNullable(data.timezone),
-        image: toNullable(data.image),
+        image: toNullable(imageKey),
       },
       select: profileSelect,
     });
 
-    return NextResponse.json({ user });
+    return NextResponse.json({ user, imageUrl: buildPublicUrlFromKey(user.image) });
   } catch (error) {
     console.error("Profile update failed", error);
     const message = error instanceof Error ? error.message : "Failed to update profile";

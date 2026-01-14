@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AlertTriangle, ArrowRight, CheckCircle2, CreditCard, Loader2, ShieldCheck } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
 import EmailInput from "@/app/components/inputs/EmailInput";
@@ -15,6 +16,8 @@ type SignupInfo = {
   planSlug: string;
   billingEmail: string;
   expiresAt: string;
+  status?: string;
+  organizationId?: string;
 };
 
 const planSeatDefaults: Record<string, number> = {
@@ -25,6 +28,8 @@ const planSeatDefaults: Record<string, number> = {
 
 export default function ConfirmSignupPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { status, data: session } = useSession();
   const token = searchParams.get("token");
   const [signup, setSignup] = useState<SignupInfo | null>(null);
   const [plans, setPlans] = useState<PricingPlan[]>(pricingPlans);
@@ -35,6 +40,13 @@ export default function ConfirmSignupPage() {
   const [success, setSuccess] = useState<{ invoiceNumber: string; organizationSlug: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      const role = (session?.user as any)?.role;
+      router.replace(role === "SUPER_ADMIN" ? "/admin" : "/dashboard");
+    }
+  }, [status, session, router]);
 
   useEffect(() => {
     const load = async () => {
@@ -63,6 +75,8 @@ export default function ConfirmSignupPage() {
           planSlug: signupPayload.signup?.planSlug ?? "standard",
           billingEmail: signupPayload.signup?.billingEmail ?? signupPayload.signup?.email ?? "",
           expiresAt: signupPayload.signup?.expiresAt ?? "",
+          status: signupPayload.signup?.status ?? "",
+          organizationId: signupPayload.signup?.organizationId ?? "",
         };
 
         setSignup(signupData);
@@ -164,6 +178,25 @@ export default function ConfirmSignupPage() {
             <div className="text-sm">
               <p className="font-semibold">We hit a snag</p>
               <p>{error}</p>
+            </div>
+          </div>
+        ) : signup?.status === "COMPLETED" ? (
+          <div className="rounded-3xl border border-green-100 bg-green-50 p-6 shadow-card-soft">
+            <div className="flex items-start gap-3">
+              <span className="rounded-full bg-white p-2 text-green-600 shadow">
+                <CheckCircle2 className="h-5 w-5" />
+              </span>
+              <div className="space-y-1 text-sm text-green-900">
+                <p className="text-lg font-semibold">Workspace already completed</p>
+                <p>
+                  {signup?.companyName} has already finished signup. You can go to login and access the workspace.
+                </p>
+                <div className="mt-3">
+                  <Button href="/auth/login" variant="secondary">
+                    Go to login
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         ) : success ? (
@@ -333,7 +366,7 @@ export default function ConfirmSignupPage() {
                 type="button"
                 fullWidth
                 rightIcon={isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                disabled={isPending}
+                disabled={isPending || (requiresPayment && !paymentConfirmed)}
                 onClick={handleSubmit}
               >
                 {isPending ? "Finalizing…" : "Confirm plan & send invoice"}

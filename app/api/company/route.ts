@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
 
 const companySchema = z.object({
   name: z.string().trim().min(1, "Company name is required").max(140),
+  companyEmail: z.string().trim().email("A valid company email is required").max(180),
   website: z.string().trim().url().max(200).optional().or(z.literal("")),
-  logo: z.string().trim().max(300).optional().or(z.literal("")),
+  logo: z.string().trim().max(500).optional().or(z.literal("")),
   domain: z.string().trim().max(140).optional().or(z.literal("")),
   industry: z.string().trim().max(140).optional().or(z.literal("")),
   size: z.string().trim().max(120).optional().or(z.literal("")),
@@ -34,6 +35,7 @@ const orgSelectAdmin = {
   billingEmail: true,
   phone: true,
   description: true,
+  companyEmail: true,
   planTier: true,
   planSlug: true,
   seatLimit: true,
@@ -53,6 +55,7 @@ const orgSelectMember = {
   name: true,
   slug: true,
   logo: true,
+  companyEmail: true,
   planTier: true,
   planSlug: true,
   plan: {
@@ -70,6 +73,32 @@ function toNullable(value?: string | null) {
   return trimmed.length ? trimmed : null;
 }
 
+function normalizeStorageKey(value?: string | null) {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+
+  const publicBase = (process.env.S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+  if (publicBase && trimmed.startsWith(publicBase)) {
+    return trimmed.slice(publicBase.length).replace(/^\/+/, "");
+  }
+
+  try {
+    const url = new URL(trimmed);
+    return url.pathname.replace(/^\/+/, "") || trimmed;
+  } catch {
+    return trimmed.replace(/^\/+/, "");
+  }
+}
+
+function buildPublicUrlFromKey(key?: string | null) {
+  const trimmed = key?.trim();
+  if (!trimmed?.length) return null;
+  if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("/")) return trimmed;
+  const publicBase = (process.env.S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+  return publicBase ? `${publicBase}/${trimmed}` : trimmed;
+}
+
 async function getSessionContext(request: NextRequest) {
   const token = await getToken({
     req: request,
@@ -84,16 +113,15 @@ async function getSessionContext(request: NextRequest) {
     return { userId: null, organizationId: null, role: null };
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: tokenOrgId ? { userId, organizationId: tokenOrgId } : { userId },
-    orderBy: { createdAt: "asc" },
-    select: { organizationId: true, role: true },
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { defaultOrgId: true, role: true },
   });
 
   return {
     userId,
-    organizationId: tokenOrgId ?? membership?.organizationId ?? null,
-    role: membership?.role ?? ((token as any)?.role as string | undefined) ?? null,
+    organizationId: tokenOrgId ?? user?.defaultOrgId ?? null,
+    role: user?.role ?? ((token as any)?.role as string | undefined) ?? null,
   };
 }
 
@@ -104,27 +132,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: { userId: context.userId, organizationId: context.organizationId },
-    select: { role: true, organizationId: true },
-  });
-
-  if (!membership) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const orgSelect = membership.role === "COMPANY_ADMIN" ? orgSelectAdmin : orgSelectMember;
-
   const organization = await prisma.organization.findUnique({
-    where: { id: membership.organizationId },
-    select: orgSelect,
+    where: { id: context.organizationId },
+    select: { ...orgSelectAdmin, ownerId: true },
   });
 
   if (!organization) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ organization, membershipRole: membership.role });
+  const isAdmin =
+    context.role === "COMPANY_ADMIN" ||
+    context.role === "SUPER_ADMIN" ||
+    organization.ownerId === context.userId;
+
+  const orgSelect = isAdmin ? organization : null;
+  const organizationResponse = {
+    ...(isAdmin
+      ? organization
+      : ({
+          id: organization.id,
+          name: organization.name,
+          slug: organization.slug,
+          logo: organization.logo,
+          planTier: organization.planTier,
+          planSlug: organization.planSlug,
+          plan: organization.plan,
+        } as typeof organization)),
+    logo: organization.logo ?? null,
+    logoKey: organization.logo ?? null,
+    logoUrl: buildPublicUrlFromKey(organization.logo),
+  };
+
+  return NextResponse.json({ organization: organizationResponse, membershipRole: context.role });
 }
 
 export async function PUT(request: NextRequest) {
@@ -134,12 +174,21 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: { userId: context.userId, organizationId: context.organizationId },
-    select: { role: true, organizationId: true },
+  const organization = await prisma.organization.findUnique({
+    where: { id: context.organizationId },
+    select: { id: true, ownerId: true },
   });
 
-  if (!membership || membership.role !== "COMPANY_ADMIN") {
+  if (!organization) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  const isAdmin =
+    context.role === "COMPANY_ADMIN" ||
+    context.role === "SUPER_ADMIN" ||
+    organization.ownerId === context.userId;
+
+  if (!isAdmin) {
     return NextResponse.json({ error: "Only company admins can update settings" }, { status: 403 });
   }
 
@@ -156,14 +205,41 @@ export async function PUT(request: NextRequest) {
   }
 
   const data = parsed.data;
+  const normalizedName = data.name.trim();
+  const normalizedCompanyEmail = data.companyEmail.trim().toLowerCase();
+
+  const duplicateName = await prisma.organization.findFirst({
+    where: {
+      id: { not: organization.id },
+      name: { equals: normalizedName, mode: "insensitive" },
+    },
+    select: { id: true },
+  });
+
+  if (duplicateName) {
+    return NextResponse.json({ error: "Another company already uses this name. Please choose a different name." }, { status: 409 });
+  }
+
+  const duplicateEmail = await prisma.organization.findFirst({
+    where: {
+      id: { not: organization.id },
+      companyEmail: normalizedCompanyEmail,
+    },
+    select: { id: true },
+  });
+
+  if (duplicateEmail) {
+    return NextResponse.json({ error: "Another company already uses this email. Please use a different company email." }, { status: 409 });
+  }
 
   try {
-    const organization = await prisma.organization.update({
-      where: { id: membership.organizationId },
+    const organizationUpdate = await prisma.organization.update({
+      where: { id: organization.id },
       data: {
-        name: data.name.trim(),
+        name: normalizedName,
+        companyEmail: normalizedCompanyEmail,
         website: toNullable(data.website),
-        logo: toNullable(data.logo),
+        logo: normalizeStorageKey(data.logo),
         domain: toNullable(data.domain),
         industry: toNullable(data.industry),
         size: toNullable(data.size),
@@ -176,7 +252,14 @@ export async function PUT(request: NextRequest) {
       select: orgSelectAdmin,
     });
 
-    return NextResponse.json({ organization });
+    const organizationResponse = {
+      ...organizationUpdate,
+      logo: organizationUpdate.logo ?? null,
+      logoKey: organizationUpdate.logo ?? null,
+      logoUrl: buildPublicUrlFromKey(organizationUpdate.logo),
+    };
+
+    return NextResponse.json({ organization: organizationResponse });
   } catch (error) {
     console.error("[company] failed to update organization", error);
     return NextResponse.json({ error: "Unable to save company" }, { status: 500 });

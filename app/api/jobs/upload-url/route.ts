@@ -12,15 +12,21 @@ type AuthToken = {
   organizationId?: string;
 };
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB hard cap for job descriptions
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB hard cap
 const UPLOAD_EXPIRES_SECONDS = 15 * 60;
 
-const allowedMimeTypes = new Set([
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-]);
+type UploadPurpose = "job-description" | "company-logo" | "profile-avatar";
+
+const allowedMimeByPurpose: Record<UploadPurpose, Set<string>> = {
+  "job-description": new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]),
+  "company-logo": new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]),
+  "profile-avatar": new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]),
+};
 
 function sanitizeFileName(name: string) {
   const base = name.replace(/[^a-zA-Z0-9._-]/g, "-");
@@ -60,19 +66,62 @@ function looksLikeText(bytes: Uint8Array) {
   return printable / bytes.length > 0.95;
 }
 
-function sniffMime(bytes: Uint8Array | null, declared: string) {
+function looksLikePng(bytes: Uint8Array) {
+  return (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  );
+}
+
+function looksLikeJpeg(bytes: Uint8Array) {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
+function looksLikeWebp(bytes: Uint8Array) {
+  return (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  );
+}
+
+function looksLikeSvg(bytes: Uint8Array) {
+  const snippet = new TextDecoder().decode(bytes.slice(0, 64)).toLowerCase();
+  return snippet.includes("<svg");
+}
+
+function sniffMime(bytes: Uint8Array | null, declared: string, allowed: Set<string>) {
   const normalized = declared.toLowerCase();
-  if (bytes && looksLikePdf(bytes)) return "application/pdf";
-  if (bytes && looksLikeDocx(bytes)) {
-    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  }
-  if (bytes && looksLikeDoc(bytes)) return "application/msword";
-  if (bytes && looksLikeText(bytes)) return "text/plain";
-  if (!bytes && allowedMimeTypes.has(normalized)) return normalized;
-  if (normalized === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return normalized;
-  if (normalized === "application/msword") return normalized;
-  if (normalized === "application/pdf") return normalized;
-  if (normalized.startsWith("text/")) return "text/plain";
+  const detections: (string | null)[] = [
+    bytes && looksLikePdf(bytes) ? "application/pdf" : null,
+    bytes && looksLikeDocx(bytes) ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : null,
+    bytes && looksLikeDoc(bytes) ? "application/msword" : null,
+    bytes && looksLikeText(bytes) ? "text/plain" : null,
+    bytes && looksLikePng(bytes) ? "image/png" : null,
+    bytes && looksLikeJpeg(bytes) ? "image/jpeg" : null,
+    bytes && looksLikeWebp(bytes) ? "image/webp" : null,
+    bytes && looksLikeSvg(bytes) ? "image/svg+xml" : null,
+  ];
+
+  const detected = detections.find((item) => item && allowed.has(item));
+  if (detected) return detected;
+
+  if (!bytes && allowed.has(normalized)) return normalized;
+  if (allowed.has(normalized)) return normalized;
+  if (normalized.startsWith("text/") && allowed.has("text/plain")) return "text/plain";
   return null;
 }
 
@@ -189,14 +238,20 @@ async function getSessionContext(request: NextRequest) {
     organizationId:
       tokenOrgId ??
       (
-        await prisma.membership.findFirst({
-          where: tokenOrgId ? { userId, organizationId: tokenOrgId } : { userId },
-          orderBy: { createdAt: "asc" },
-          select: { organizationId: true },
+        await prisma.user.findUnique({
+          where: { id: userId },
+          select: { defaultOrgId: true },
         })
-      )?.organizationId ??
+      )?.defaultOrgId ??
       null,
   };
+}
+
+function getPurpose(request: NextRequest): UploadPurpose {
+  const purposeParam = request.nextUrl.searchParams.get("purpose")?.toLowerCase() ?? "";
+  if (purposeParam === "company-logo" || purposeParam === "logo") return "company-logo";
+  if (purposeParam === "profile-avatar" || purposeParam === "avatar") return "profile-avatar";
+  return "job-description";
 }
 
 function deriveTitleFromFilename(filename: string | null) {
@@ -246,6 +301,8 @@ async function resolveJobForUpload(options: {
 
 export async function POST(request: NextRequest) {
   try {
+    const purpose = getPurpose(request);
+    const allowedMimeTypes = allowedMimeByPurpose[purpose] ?? allowedMimeByPurpose["job-description"];
     const storage = {
       bucket: process.env.S3_BUCKET,
       endpoint: process.env.S3_ENDPOINT,
@@ -269,7 +326,10 @@ export async function POST(request: NextRequest) {
 
     const context = await getSessionContext(request);
 
-    if (!context.userId || !context.organizationId) {
+    if (purpose === "job-description" && (!context.userId || !context.organizationId)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if ((purpose === "company-logo" || purpose === "profile-avatar") && !context.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -295,34 +355,63 @@ export async function POST(request: NextRequest) {
       }
 
       const headerBytes = new Uint8Array(await file.slice(0, 32).arrayBuffer());
-      const sniffedMime = sniffMime(headerBytes, providedContentType ?? file.type ?? "application/octet-stream");
+      const sniffedMime = sniffMime(
+        headerBytes,
+        providedContentType ?? file.type ?? "application/octet-stream",
+        allowedMimeTypes,
+      );
       if (!sniffedMime || !allowedMimeTypes.has(sniffedMime)) {
         return NextResponse.json({ error: "Unsupported or unsafe file type" }, { status: 400 });
       }
-
-      let jobForUpload;
-      try {
-        jobForUpload = await resolveJobForUpload({
-          jobId: providedJobId,
-          jobTitle: providedJobTitle,
-          fallbackTitle,
-          organizationId: context.organizationId,
-          userId: context.userId,
-        });
-      } catch (jobError) {
-        const message = (jobError as Error)?.message ?? "Unable to create job for upload";
-        const status = message.includes("not found") ? 404 : 400;
-        return NextResponse.json({ error: message }, { status });
-      }
-
       const safeName = sanitizeFileName(providedName ?? file.name);
       const extension = safeName.includes(".") ? safeName.slice(safeName.lastIndexOf(".")) : "";
-      const objectKey = [
-        "uploads",
-        "job-descriptions",
-        context.organizationId,
-        `${jobForUpload.id}${extension}`,
-      ].join("/");
+
+      let objectKey: string;
+      let jobId: string | undefined;
+
+      if (purpose === "company-logo") {
+        objectKey = ["uploads", "company-logos", context.organizationId ?? "public", `${Date.now()}-${safeName}`].join(
+          "/",
+        );
+      } else if (purpose === "profile-avatar") {
+        const extension = safeName.includes(".") ? safeName.slice(safeName.lastIndexOf(".")) : "";
+        const fileLabel = extension ? `avatar${extension}` : "avatar";
+        objectKey = ["uploads", "profile-picture", context.userId ?? "user", fileLabel].join("/");
+      } else {
+        let jobForUpload;
+        try {
+          jobForUpload = await resolveJobForUpload({
+            jobId: providedJobId,
+            jobTitle: providedJobTitle,
+            fallbackTitle,
+            organizationId: context.organizationId!,
+            userId: context.userId!,
+          });
+        } catch (jobError) {
+          const message = (jobError as Error)?.message ?? "Unable to create job for upload";
+          const status = message.includes("not found") ? 404 : 400;
+          return NextResponse.json({ error: message }, { status });
+        }
+        jobId = jobForUpload.id;
+        objectKey = ["uploads", "job-descriptions", context.organizationId!, `${jobForUpload.id}${extension}`].join("/");
+
+        const existingRequirements =
+          (jobForUpload.requirements as Prisma.JsonObject | null) && typeof jobForUpload.requirements === "object"
+            ? (jobForUpload.requirements as Prisma.JsonObject)
+            : {};
+        const updatedRequirements: Prisma.JsonObject = {
+          ...existingRequirements,
+          uploadedDescriptionFile: objectKey,
+        };
+
+        await prisma.job.update({
+          where: { id: jobForUpload.id },
+          data: {
+            requirements: updatedRequirements as Prisma.InputJsonValue,
+            lastActivityAt: new Date(),
+          },
+        });
+      }
 
       const uploadUrl = await presignPutUrl({
         endpoint: storage.endpoint,
@@ -346,23 +435,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Upload to storage failed" }, { status: 502 });
       }
 
-      const existingRequirements =
-        (jobForUpload.requirements as Prisma.JsonObject | null) && typeof jobForUpload.requirements === "object"
-          ? (jobForUpload.requirements as Prisma.JsonObject)
-          : {};
-      const updatedRequirements: Prisma.JsonObject = {
-        ...existingRequirements,
-        uploadedDescriptionFile: objectKey,
-      };
-
-      await prisma.job.update({
-        where: { id: jobForUpload.id },
-        data: {
-          requirements: updatedRequirements as Prisma.InputJsonValue,
-          lastActivityAt: new Date(),
-        },
-      });
-
       const publicUrl =
         storage.publicBaseUrl && storage.publicBaseUrl.length
           ? `${storage.publicBaseUrl.replace(/\/+$/, "")}/${objectKey}`
@@ -380,7 +452,7 @@ export async function POST(request: NextRequest) {
         virusScanQueued: scanRequested,
         securityNote,
         uploaded: true,
-        jobId: jobForUpload.id,
+        jobId,
       });
     } else {
       let payload: unknown;
@@ -409,34 +481,59 @@ export async function POST(request: NextRequest) {
       }
 
       const headerBytes = decodeHeaderBytes(parsed.data.headerBytes);
-      const sniffedMime = sniffMime(headerBytes, parsed.data.contentType);
+      const sniffedMime = sniffMime(headerBytes, parsed.data.contentType, allowedMimeTypes);
       if (!sniffedMime || !allowedMimeTypes.has(sniffedMime)) {
         return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
       }
 
-      let jobForUpload;
-      try {
-        jobForUpload = await resolveJobForUpload({
-          jobId: parsed.data.jobId ?? null,
-          jobTitle: parsed.data.jobTitle ?? null,
-          fallbackTitle: parsed.data.fileName ?? null,
-          organizationId: context.organizationId,
-          userId: context.userId,
-        });
-      } catch (jobError) {
-        const message = (jobError as Error)?.message ?? "Unable to create job for upload";
-        const status = message.includes("not found") ? 404 : 400;
-        return NextResponse.json({ error: message }, { status });
-      }
-
       const safeName = sanitizeFileName(parsed.data.fileName);
       const extension = safeName.includes(".") ? safeName.slice(safeName.lastIndexOf(".")) : "";
-      const objectKey = [
-        "uploads",
-        "job-descriptions",
-        context.organizationId,
-        `${jobForUpload.id}${extension}`,
-      ].join("/");
+      let objectKey: string;
+      let jobId: string | undefined;
+
+      if (purpose === "company-logo") {
+        objectKey = ["uploads", "company-logos", context.organizationId ?? "public", `${Date.now()}-${safeName}`].join(
+          "/",
+        );
+      } else if (purpose === "profile-avatar") {
+        const extension = safeName.includes(".") ? safeName.slice(safeName.lastIndexOf(".")) : "";
+        const fileLabel = extension ? `avatar${extension}` : "avatar";
+        objectKey = ["uploads", "profile-picture", context.userId ?? "user", fileLabel].join("/");
+      } else {
+        let jobForUpload;
+        try {
+          jobForUpload = await resolveJobForUpload({
+            jobId: parsed.data.jobId ?? null,
+            jobTitle: parsed.data.jobTitle ?? null,
+            fallbackTitle: parsed.data.fileName ?? null,
+            organizationId: context.organizationId!,
+            userId: context.userId!,
+          });
+        } catch (jobError) {
+          const message = (jobError as Error)?.message ?? "Unable to create job for upload";
+          const status = message.includes("not found") ? 404 : 400;
+          return NextResponse.json({ error: message }, { status });
+        }
+        jobId = jobForUpload.id;
+        objectKey = ["uploads", "job-descriptions", context.organizationId!, `${jobForUpload.id}${extension}`].join("/");
+
+        const existingRequirements =
+          (jobForUpload.requirements as Prisma.JsonObject | null) && typeof jobForUpload.requirements === "object"
+            ? (jobForUpload.requirements as Prisma.JsonObject)
+            : {};
+        const updatedRequirements: Prisma.JsonObject = {
+          ...existingRequirements,
+          uploadedDescriptionFile: objectKey,
+        };
+
+        await prisma.job.update({
+          where: { id: jobForUpload.id },
+          data: {
+            requirements: updatedRequirements as Prisma.InputJsonValue,
+            lastActivityAt: new Date(),
+          },
+        });
+      }
 
       const uploadUrl = await presignPutUrl({
         endpoint: storage.endpoint,
@@ -457,23 +554,6 @@ export async function POST(request: NextRequest) {
       const securityNote =
         "We hard-cap uploads at 5MB, reject mismatched MIME signatures, and queue virus scanning for higher-risk tiers.";
 
-      const existingRequirements =
-        (jobForUpload.requirements as Prisma.JsonObject | null) && typeof jobForUpload.requirements === "object"
-          ? (jobForUpload.requirements as Prisma.JsonObject)
-          : {};
-      const updatedRequirements: Prisma.JsonObject = {
-        ...existingRequirements,
-        uploadedDescriptionFile: objectKey,
-      };
-
-      await prisma.job.update({
-        where: { id: jobForUpload.id },
-        data: {
-          requirements: updatedRequirements as Prisma.InputJsonValue,
-          lastActivityAt: new Date(),
-        },
-      });
-
       return NextResponse.json({
         uploadUrl,
         key: objectKey,
@@ -483,7 +563,7 @@ export async function POST(request: NextRequest) {
         expiresInSeconds: UPLOAD_EXPIRES_SECONDS,
         virusScanQueued: Boolean(parsed.data.scan),
         securityNote,
-        jobId: jobForUpload.id,
+        jobId,
       });
     }
   } catch (error) {

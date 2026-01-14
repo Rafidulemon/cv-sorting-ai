@@ -2,15 +2,13 @@
 
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, ComponentType, FormEvent, ReactNode } from "react";
-import { createPortal } from "react-dom";
+import type { ChangeEvent, FormEvent } from "react";
 import Image from "next/image";
 import {
   AlertTriangle,
   Activity,
   Building2,
   CheckCircle2,
-  Eye,
   Globe2,
   Loader2,
   Mail,
@@ -21,30 +19,27 @@ import {
   Wallet,
   BarChart3,
   Users2,
-  X,
 } from "lucide-react";
 import Button from "@/app/components/buttons/Button";
+import DetailCard from "@/app/components/company/DetailCard";
+import MemberDetailsModal from "@/app/components/company/MemberDetailsModal";
+import MetricCard from "@/app/components/company/MetricCard";
+import MiniBarChart from "@/app/components/company/MiniBarChart";
+import ProgressMeter from "@/app/components/company/ProgressMeter";
+import CompanyMembersSection from "@/app/components/company/CompanyMembersSection";
+import ClientLayoutLoading from "@/app/components/loading/ClientLayoutLoading";
 import { CompanyEditModal } from "@/app/components/modals/CompanyEditModal";
-import SelectBox from "@/app/components/inputs/SelectBox";
-import type { CompanyForm } from "@/app/types/company";
+import type {
+  CompanyBarData,
+  CompanyForm,
+  CompanyMember,
+  CompanyPlanSnapshot,
+  CompanyRoleOption,
+} from "@/app/types/company";
 
 const defaultLogo = "/logo/carriastic_logo.png";
 const defaultAvatar = "/images/default_dp.png";
-
-const initialCompany: CompanyForm = {
-  name: "carriX Labs",
-  website: "https://carrix.ai",
-  logo: defaultLogo,
-  domain: "carrix.ai",
-  industry: "HR Tech · AI",
-  size: "51-200",
-  region: "APAC",
-  hqLocation: "Dhaka, Bangladesh",
-  billingEmail: "billing@carrix.ai",
-  phone: "+880 1700 123 456",
-  description:
-    "AI-first hiring suite powering resume scoring, shortlist recommendations, and recruiter workflows.",
-};
+const logoBaseUrl = (process.env.NEXT_PUBLIC_S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
 
 const displayValue = (value?: string) => {
   const trimmed = value?.trim();
@@ -62,32 +57,15 @@ const parseTeamLimit = (value?: string | number | null) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-type DetailItem = {
-  label: string;
-  value?: string;
-  helper?: string;
-  isLink?: boolean;
-  span?: boolean;
-};
-
-type DetailCardProps = {
-  title: string;
-  helper: string;
-  icon: ComponentType<{ className?: string }>;
-  items: DetailItem[];
-};
-
-type MemberRecord = {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  image?: string | null;
-  role: string;
-  status: string;
-  isOwner?: boolean;
-  createdAt?: string;
-  lastActiveAt?: string;
+const emptyPlanSnapshot: CompanyPlanSnapshot = {
+  name: "",
+  renewal: "",
+  seatLimit: 0,
+  creditBalance: 0,
+  currency: "credits",
+  cvSortedTotal: 0,
+  cvSortedThisMonth: 0,
+  cvSortedTarget: 0,
 };
 
 const formatRole = (value?: string, isOwner?: boolean) => {
@@ -122,19 +100,26 @@ const formatDate = (value?: string) => {
   return date.toLocaleDateString();
 };
 
-const memberInitial = (name?: string, fallback?: string) => {
-  const source = (name || fallback || "?").trim();
-  return source.charAt(0).toUpperCase() || "?";
-};
-
 const resolveLogo = (value?: string | null) => {
   const trimmed = value?.trim();
-  return trimmed?.length ? trimmed : defaultLogo;
+  if (!trimmed) return defaultLogo;
+  if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("/")) return trimmed;
+  const normalized = trimmed.replace(/^\/+/, "");
+  return logoBaseUrl ? `${logoBaseUrl}/${normalized}` : `/${normalized}`;
 };
 
 const resolveAvatar = (value?: string | null) => {
   const trimmed = value?.trim();
-  return trimmed?.length ? trimmed : defaultAvatar;
+  if (!trimmed) return defaultAvatar;
+  if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("data:")) return trimmed;
+  const normalized = trimmed.replace(/^\/+/, "");
+  const normalizedStorage = normalized.replace(/^uploads\/profile-avatars\//, "uploads/profile-picture/");
+  if (normalizedStorage.startsWith("uploads/")) {
+    if (logoBaseUrl) return `${logoBaseUrl}/${normalizedStorage}`;
+    return `/${normalizedStorage}`;
+  }
+  if (trimmed.startsWith("/")) return trimmed;
+  return logoBaseUrl ? `${logoBaseUrl}/${normalizedStorage}` : `/${normalizedStorage}`;
 };
 
 type SparklineProps = { data: number[]; color?: string };
@@ -164,321 +149,14 @@ function Sparkline({ data, color = "#3D64FF" }: SparklineProps) {
   );
 }
 
-type BarData = { label: string; value: number };
-
-function MiniBarChart({ data, accent = "#3D64FF" }: { data: BarData[]; accent?: string }) {
-  const max = Math.max(...data.map((item) => item.value), 1);
-  return (
-    <div className="space-y-3">
-      {data.map((item) => (
-        <div key={item.label} className="flex items-center gap-3">
-          <span className="w-16 text-xs font-semibold text-[#6b7280]">{item.label}</span>
-          <div className="relative h-2 flex-1 rounded-full bg-[#EEF2F7]">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full"
-              style={{ width: `${(item.value / max) * 100}%`, backgroundColor: accent }}
-            />
-          </div>
-          <span className="w-14 text-right text-xs font-semibold text-[#1f2a44]">{item.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ProgressMeter({ value, limit, label }: { value: number; limit: number; label: string }) {
-  const safeLimit = Number.isFinite(limit) ? limit : 0;
-  const percent = safeLimit > 0 ? Math.min(100, Math.round((value / safeLimit) * 100)) : 0;
-  const limitLabel = safeLimit > 0 ? safeLimit : "—";
-  const percentLabel = safeLimit > 0 ? `${percent}%` : "—";
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs font-semibold text-[#4b5563]">
-        <span>{label}</span>
-        <span>
-          {value} / {limitLabel} · {percentLabel}
-        </span>
-      </div>
-      <div className="h-2 rounded-full bg-[#EEF2F7]">
-        <div className="h-2 rounded-full bg-gradient-to-r from-[#3D64FF] to-[#7b6dff]" style={{ width: `${percent}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({
-  title,
-  value,
-  helper,
-  icon: Icon,
-  accent = "primary",
-  footer,
-}: {
-  title: string;
-  value: string;
-  helper: string;
-  icon: ComponentType<{ className?: string }>;
-  accent?: "primary" | "emerald" | "amber" | "indigo";
-  footer?: ReactNode;
-}) {
-  const accentMap: Record<"primary" | "emerald" | "amber" | "indigo", string> = {
-    primary: "bg-primary-50 text-primary-600",
-    emerald: "bg-emerald-50 text-emerald-600",
-    amber: "bg-amber-50 text-amber-600",
-    indigo: "bg-indigo-50 text-indigo-600",
-  };
-  return (
-    <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-card-soft">
-      <div className="flex items-start justify-between">
-        <div className={`grid h-11 w-11 place-items-center rounded-2xl ${accentMap[accent]}`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        {footer}
-      </div>
-      <div className="mt-4 space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8a90a6]">{title}</p>
-        <p className="text-2xl font-semibold text-[#1f2a44]">{value}</p>
-        <p className="text-xs text-[#6b7280]">{helper}</p>
-      </div>
-    </div>
-  );
-}
-
-function DetailCard({ title, helper, icon: Icon, items }: DetailCardProps) {
-  return (
-    <div className="space-y-4 rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card-soft">
-      <div className="flex items-center gap-3">
-        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-50 text-primary-600">
-          <Icon className="h-5 w-5" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-[#1f2a44]">{title}</p>
-          <p className="text-xs text-[#6b7280]">{helper}</p>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {items.map((item) => {
-          const hasValue = Boolean(item.value && item.value.trim().length);
-          return (
-            <div
-              key={item.label}
-              className={`rounded-2xl border border-white/70 bg-white px-4 py-3 shadow-card-soft ${item.span ? "sm:col-span-2" : ""}`}
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a90a6]">{item.label}</p>
-              {item.isLink && hasValue ? (
-                <a
-                  href={item.value}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-primary-700 underline-offset-4 hover:underline"
-                >
-                  {item.value}
-                </a>
-              ) : (
-                <p className="mt-1 text-sm text-[#1f2a44]">{displayValue(item.value)}</p>
-              )}
-              {item.helper ? <p className="text-xs text-[#6b7280]">{item.helper}</p> : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-type MemberDetailsModalProps = {
-  open: boolean;
-  member: MemberRecord | null;
-  onClose: () => void;
-  selectedRole: string;
-  onRoleChange: (value: string) => void;
-  onSave: () => void;
-  isSaving: boolean;
-  error?: string;
-  canEditRole: boolean;
-  restrictionNote?: string;
-  roleOptions: { label: string; value: string; disabled?: boolean }[];
-};
-
-function MemberDetailsModal({
-  open,
-  member,
-  onClose,
-  selectedRole,
-  onRoleChange,
-  onSave,
-  isSaving,
-  error,
-  canEditRole,
-  restrictionNote,
-  roleOptions,
-}: MemberDetailsModalProps) {
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [open]);
-
-  if (typeof document === "undefined") return null;
-
-  const avatarSrc = resolveAvatar(member?.image);
-  const avatarAlt = member?.name ?? member?.email ?? "Member avatar";
-  const roleLabel = formatRole(member?.role, member?.isOwner);
-  const statusLabel = formatStatus(member?.status);
-  const saveDisabled = !member || isSaving || selectedRole === member.role || !canEditRole;
-
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="member-details-title"
-      className={`fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#0f172a]/40 p-4 py-10 backdrop-blur-sm transition-opacity duration-200 ${
-        open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-      }`}
-      onClick={onClose}
-    >
-      <div
-        className={`relative mx-auto w-[min(680px,calc(100%-2rem))] max-h-[90vh] transform transition-all duration-300 ${
-          open ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-        }`}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_28px_70px_rgba(24,27,49,0.22)]">
-          <div className="flex items-start justify-between gap-4 border-b border-[#EEF2F7] bg-gradient-to-r from-[#fef8ff] via-[#f5f6ff] to-white px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-[#EEF2F7] bg-primary-50 text-lg font-semibold text-primary-700">
-                <span className="absolute inset-0 grid place-items-center text-primary-700">
-                  {member ? memberInitial(member.name, member.email) : "?"}
-                </span>
-                <Image
-                  src={avatarSrc}
-                  alt={avatarAlt}
-                  fill
-                  sizes="48px"
-                  className="object-cover"
-                />
-              </div>
-              <div>
-                <h2 id="member-details-title" className="text-lg font-semibold text-[#1f2a44]">
-                  {member?.name ?? "Member details"}
-                </h2>
-                <p className="text-xs text-[#6b7280]">{member?.email ?? "Select a member to view details"}</p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              onClick={onClose}
-              variant="ghost"
-              size="sm"
-              aria-label="Close member details"
-              className="rounded-full !px-2 !py-2 text-[#6b7280] hover:bg-[#f2f4f7] hover:text-[#1f2a44]"
-              leftIcon={<X className="h-4 w-4" />}
-            >
-              Close
-            </Button>
-          </div>
-
-          {error ? (
-            <div className="flex items-center gap-2 border-b border-danger-100 bg-danger-50/70 px-6 py-3 text-danger-700">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-sm font-semibold">{error}</span>
-            </div>
-          ) : null}
-
-          <div className="space-y-5 px-6 py-5">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/70 bg-[#f8fafc] px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a90a6]">Role</p>
-                <p className="mt-1 text-sm font-semibold text-[#1f2a44]">{roleLabel}</p>
-                <p className="text-xs text-[#6b7280]">
-                  {member?.isOwner ? "Workspace owner" : "Current permission level"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/70 bg-[#f8fafc] px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a90a6]">Status</p>
-                <p className="mt-1 text-sm font-semibold text-[#1f2a44]">{statusLabel}</p>
-                <p className="text-xs text-[#6b7280]">Invites and access are tied to this status.</p>
-              </div>
-              <div className="rounded-2xl border border-white/70 bg-[#f8fafc] px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a90a6]">Joined</p>
-                <p className="mt-1 text-sm font-semibold text-[#1f2a44]">{formatDate(member?.createdAt)}</p>
-              </div>
-              <div className="rounded-2xl border border-white/70 bg-[#f8fafc] px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a90a6]">Last active</p>
-                <p className="mt-1 text-sm font-semibold text-[#1f2a44]">{formatDate(member?.lastActiveAt)}</p>
-              </div>
-            </div>
-
-            <div className="space-y-4 rounded-2xl border border-[#EEF2F7] bg-[#f8fafc] px-4 py-4 shadow-inner">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-[#1f2a44]">Change member role</p>
-                  <p className="text-xs text-[#6b7280]">Updates apply immediately for this workspace.</p>
-                  {restrictionNote ? (
-                    <p className="text-xs font-semibold text-danger-600">{restrictionNote}</p>
-                  ) : null}
-                </div>
-                <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#3D64FF]">
-                  {roleLabel}
-                </span>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                <SelectBox
-                  label="Member role"
-                  value={selectedRole}
-                  onChange={(event) => onRoleChange(event.target.value)}
-                  options={roleOptions}
-                  disabled={!canEditRole || isSaving || !member}
-                  helperText={
-                    canEditRole
-                      ? "Select a new permission level for this teammate."
-                      : "You don't have permission to change this member."
-                  }
-                />
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={onClose}
-                    className="w-full sm:w-auto"
-                    disabled={isSaving}
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={onSave}
-                    disabled={saveDisabled}
-                    className="w-full sm:w-auto"
-                  >
-                    {isSaving ? "Saving…" : "Save changes"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 export default function CompanyPage() {
   const { data: session, status } = useSession();
   const sessionUser = session?.user as { id?: string; role?: string; organizationId?: string } | undefined;
   const role = sessionUser?.role;
   const userId = sessionUser?.id ?? null;
-  const organizationId = sessionUser?.organizationId;
   const isMountedRef = useRef(true);
-  const [form, setForm] = useState<CompanyForm>(initialCompany);
-  const [initialData, setInitialData] = useState<CompanyForm>(initialCompany);
-  const [orgId, setOrgId] = useState<string | null>(organizationId ?? null);
+  const [form, setForm] = useState<CompanyForm | null>(null);
+  const [initialData, setInitialData] = useState<CompanyForm | null>(null);
   const [orgOwnerId, setOrgOwnerId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -486,7 +164,7 @@ export default function CompanyPage() {
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [members, setMembers] = useState<CompanyMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState("");
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
@@ -494,28 +172,25 @@ export default function CompanyPage() {
   const [selectedRole, setSelectedRole] = useState("");
   const [memberActionError, setMemberActionError] = useState("");
   const [isSavingMember, setIsSavingMember] = useState(false);
-  const [planSnapshot, setPlanSnapshot] = useState({
-    name: "Standard",
-    renewal: "Renews soon",
-    seatLimit: 0,
-    creditBalance: 1240,
-    currency: "credits",
-    cvSortedTotal: 4280,
-    cvSortedThisMonth: 320,
-    cvSortedTarget: 500,
-  });
+  const [companyLogoSrc, setCompanyLogoSrc] = useState(() => resolveLogo(null));
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState(() => resolveLogo(null));
+  const [planSnapshot, setPlanSnapshot] = useState<CompanyPlanSnapshot>(emptyPlanSnapshot);
 
   const isCompanyAdmin = role === "COMPANY_ADMIN";
 
-  const mapOrgToForm = (payload: Partial<CompanyForm>): CompanyForm => ({
+  const mapOrgToForm = (
+    payload: Partial<CompanyForm> & { logoKey?: string | null; logoUrl?: string | null },
+  ): CompanyForm => ({
     name: payload.name ?? "",
     website: payload.website ?? "",
-    logo: payload.logo ?? defaultLogo,
+    logo: payload.logoUrl ?? payload.logoKey ?? payload.logo ?? defaultLogo,
     domain: payload.domain ?? "",
     industry: payload.industry ?? "",
     size: payload.size ?? "",
     region: payload.region ?? "",
     hqLocation: payload.hqLocation ?? "",
+    companyEmail: payload.companyEmail ?? payload.billingEmail ?? "",
     billingEmail: payload.billingEmail ?? "",
     phone: payload.phone ?? "",
     description: payload.description ?? "",
@@ -523,19 +198,35 @@ export default function CompanyPage() {
 
   const handleChange =
     (key: keyof CompanyForm) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setForm((prev) => ({ ...prev, [key]: event.target.value }));
+      setForm((prev) => (prev ? { ...prev, [key]: event.target.value } : prev));
     };
+
+  useEffect(() => {
+    if (!initialData) return;
+    setLogoPreview(resolveLogo(initialData.logo));
+    setCompanyLogoSrc(resolveLogo(initialData.logo));
+  }, [initialData]);
+
+  const handleLogoSelect = (file: File) => {
+    if (logoPreview && logoPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(logoPreview);
+    }
+    setPendingLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
 
   const loadCompany = useCallback(async () => {
     if (status === "loading") return;
     setLoading(true);
     setLoadError("");
+    setPendingLogoFile(null);
     try {
       const response = await fetch("/api/company");
       const payload = await response.json();
       if (!response.ok) {
         if (response.status === 403 || response.status === 404) {
-          return;
+            setLoadError("Unable to access company details.");
+            return;
         }
         throw new Error(payload?.error ?? "Unable to load company");
       }
@@ -543,13 +234,14 @@ export default function CompanyPage() {
       if (isMountedRef.current) {
         setForm(company);
         setInitialData(company);
-        setOrgId((payload?.organization?.id as string | undefined) ?? organizationId ?? null);
+        setLogoPreview(resolveLogo(company.logo));
+        setCompanyLogoSrc(resolveLogo(company.logo));
         setSavedAt(null);
         const planFromPayload = payload?.organization?.plan as { name?: string; slug?: string; team?: string | number } | undefined;
         const planName =
           (planFromPayload?.name && planFromPayload.name.trim()) ||
           (planFromPayload?.slug && planFromPayload.slug.trim()) ||
-          "Standard";
+          "";
         const teamLimit =
           parseTeamLimit(planFromPayload?.team) ??
           (typeof payload?.organization?.seatLimit === "number" ? payload.organization.seatLimit : null);
@@ -561,6 +253,7 @@ export default function CompanyPage() {
           seatLimit: teamLimit ?? prev.seatLimit,
           creditBalance: creditBalanceFromPayload ?? prev.creditBalance,
         }));
+        setLoadError("");
       }
     } catch (error) {
       console.error(error);
@@ -570,7 +263,7 @@ export default function CompanyPage() {
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [organizationId, status]);
+  }, [status]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -625,7 +318,13 @@ export default function CompanyPage() {
         if (isActive) {
           type MemberPayload = {
             id?: string;
-            user?: { id?: string | null; name?: string | null; email?: string | null; image?: string | null } | null;
+            user?: {
+              id?: string | null;
+              name?: string | null;
+              email?: string | null;
+              image?: string | null;
+              imageUrl?: string | null;
+            } | null;
             role?: string;
             status?: string;
             createdAt?: string;
@@ -641,7 +340,7 @@ export default function CompanyPage() {
             userId: member.user?.id ?? `user-${index}`,
             name: member.user?.name ?? "Unknown",
             email: member.user?.email ?? "—",
-            image: member.user?.image ?? null,
+            image: member.user?.imageUrl ?? member.user?.image ?? null,
             role: member.role ?? "",
             status: member.status ?? "",
             createdAt: member.createdAt,
@@ -670,23 +369,51 @@ export default function CompanyPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!form) {
+      setSaveError("Company data is still loading.");
+      return;
+    }
     setIsSaving(true);
     setSavedAt(null);
     setSaveError("");
 
     try {
+      let logoToSave = form.logo;
+      if (pendingLogoFile) {
+        const formData = new FormData();
+        formData.append("file", pendingLogoFile);
+        formData.append("fileName", pendingLogoFile.name);
+        formData.append("contentType", pendingLogoFile.type);
+
+        const uploadResponse = await fetch("/api/jobs/upload-url?purpose=company-logo", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadPayload = await uploadResponse.json();
+        if (!uploadResponse.ok) {
+          throw new Error(uploadPayload?.error ?? "Unable to upload logo right now.");
+        }
+        logoToSave = uploadPayload?.key ?? uploadPayload?.publicUrl ?? logoToSave;
+      }
+
       const response = await fetch("/api/company", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, logo: logoToSave }),
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Unable to save company");
+        const message = payload?.error ?? "Unable to save company";
+        setSaveError(message);
+        setIsSaving(false);
+        return;
       }
       const company = mapOrgToForm(payload?.organization ?? form);
       setForm(company);
       setInitialData(company);
+      setPendingLogoFile(null);
+      setLogoPreview(resolveLogo(company.logo));
+      setCompanyLogoSrc(resolveLogo(company.logo));
       setSavedAt(Date.now());
       setIsEditOpen(false);
     } catch (error) {
@@ -716,7 +443,7 @@ export default function CompanyPage() {
     setMemberActionError("");
   }, [selectedMember]);
 
-  const roleOptions = useMemo(
+  const roleOptions = useMemo<CompanyRoleOption[]>(
     () => [
       { label: "Company admin", value: "COMPANY_ADMIN" },
       { label: "Member", value: "COMPANY_MEMBER" },
@@ -753,7 +480,7 @@ export default function CompanyPage() {
     return undefined;
   }, [selectedMember, actorCanManageMembers, selectedMemberIsOwner, actorIsOwner, userId]);
 
-  const applyOwnerFlag = (list: MemberRecord[], owner: string | null) =>
+  const applyOwnerFlag = (list: CompanyMember[], owner: string | null) =>
     list.map((member) => ({ ...member, isOwner: owner ? member.userId === owner : false }));
 
   const openMemberModal = (memberId: string) => {
@@ -840,28 +567,45 @@ export default function CompanyPage() {
   };
 
   const openEditModal = () => {
+    if (!initialData) return;
     setForm(initialData);
     setSaveError("");
+    setPendingLogoFile(null);
+    setLogoPreview(resolveLogo(initialData.logo));
     setIsEditOpen(true);
   };
 
   const closeEditModal = () => {
+    if (!initialData) return;
     setSaveError("");
     setForm(initialData);
+    setPendingLogoFile(null);
+    setLogoPreview(resolveLogo(initialData.logo));
     setIsEditOpen(false);
   };
 
   const resetForm = () => {
+    if (!initialData) return;
     setForm(initialData);
+    setPendingLogoFile(null);
+    setLogoPreview(resolveLogo(initialData.logo));
     setSaveError("");
   };
+
+  useEffect(() => {
+    return () => {
+      if (logoPreview && logoPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(logoPreview);
+      }
+    };
+  }, [logoPreview]);
 
   const seatsUsed = members.length + pendingInviteCount;
   const seatLimit = planSnapshot.seatLimit ?? 0;
   const seatsRemaining = Math.max(seatLimit - seatsUsed, 0);
   const canInviteMore = seatLimit > 0 && seatsRemaining > 0;
 
-  const cvHistory: BarData[] = [
+  const cvHistory: CompanyBarData[] = [
     { label: "Jan", value: 280 },
     { label: "Feb", value: 320 },
     { label: "Mar", value: 410 },
@@ -872,12 +616,19 @@ export default function CompanyPage() {
   const creditHistory = [1180, 1230, 1200, 1260, 1240, 1275];
   const cvSparkline = creditHistory;
 
+  useEffect(() => {
+    if (!initialData) return;
+    setCompanyLogoSrc(resolveLogo(initialData.logo));
+  }, [initialData]);
+
+  const globalLoading = (
+    <div className="fixed inset-0 z-50">
+      <ClientLayoutLoading />
+    </div>
+  );
+
   if (status === "loading") {
-    return (
-      <div className="rounded-2xl border border-white/60 bg-white/70 p-8 shadow-card-soft backdrop-blur">
-        <p className="text-sm font-semibold text-[#1f2a44]">Loading company settings…</p>
-      </div>
-    );
+    return globalLoading;
   }
 
   if (!isCompanyAdmin) {
@@ -897,8 +648,22 @@ export default function CompanyPage() {
     );
   }
 
+  if (!initialData) {
+    if (loadError) {
+      return (
+        <div className="rounded-2xl border border-white/60 bg-white/70 p-8 shadow-card-soft backdrop-blur">
+          <div className="flex items-center gap-2 text-danger-600">
+            <AlertTriangle className="h-5 w-5" />
+            <span className="text-sm font-semibold">{loadError}</span>
+          </div>
+        </div>
+      );
+    }
+
+    return globalLoading;
+  }
+
   const company = initialData;
-  const companyLogo = resolveLogo(company.logo);
 
   return (
     <div className="space-y-8 text-[#1f2a44]">
@@ -911,11 +676,12 @@ export default function CompanyPage() {
           <div className="flex items-center gap-4">
             <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-card-soft">
               <Image
-                src={companyLogo}
+                src={companyLogoSrc}
                 alt={`${company.name || "Company"} logo`}
                 fill
                 sizes="64px"
                 className="object-contain p-2"
+                onError={() => setCompanyLogoSrc(defaultLogo)}
               />
             </div>
             <div className="space-y-1">
@@ -928,7 +694,7 @@ export default function CompanyPage() {
               type="button"
               onClick={openEditModal}
               leftIcon={<PencilLine className="h-4 w-4" />}
-              disabled={loading}
+              disabled={loading || !initialData}
             >
               Edit company
             </Button>
@@ -1080,6 +846,7 @@ export default function CompanyPage() {
             helper="Where invoices and alerts are sent."
             icon={Mail}
             items={[
+              { label: "Company email", value: company.companyEmail, helper: "Official workspace contact." },
               { label: "Billing email", value: company.billingEmail },
               { label: "Phone", value: company.phone },
             ]}
@@ -1103,170 +870,37 @@ export default function CompanyPage() {
         </div>
       </div>
 
-      <CompanyEditModal
-        open={isEditOpen}
-        onClose={closeEditModal}
-        form={form}
-        onChange={handleChange}
-        onSubmit={handleSubmit}
-        onReset={resetForm}
-        isSaving={isSaving}
-        loading={loading}
-        saveError={saveError}
+      {initialData && form ? (
+        <CompanyEditModal
+          open={isEditOpen}
+          onClose={closeEditModal}
+          form={form}
+          onChange={handleChange}
+          onLogoSelect={handleLogoSelect}
+          onSubmit={handleSubmit}
+          onReset={resetForm}
+          isSaving={isSaving}
+          loading={loading}
+          saveError={saveError}
+          logoPreview={logoPreview}
+          isLogoPending={Boolean(pendingLogoFile)}
+        />
+      ) : null}
+
+      <CompanyMembersSection
+        members={members}
+        membersLoading={membersLoading}
+        membersError={membersError || undefined}
+        canInviteMore={canInviteMore}
+        seatsRemaining={seatsRemaining}
+        seatLimit={seatLimit}
+        defaultAvatar={defaultAvatar}
+        resolveAvatar={resolveAvatar}
+        formatRole={formatRole}
+        formatStatus={formatStatus}
+        formatDate={formatDate}
+        onViewMember={openMemberModal}
       />
-
-      <section className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card-soft">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#e9f0ff] text-[#3D64FF]">
-              <Users2 className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-[#1f2a44]">Company Members</p>
-              <p className="text-xs text-[#6b7280]">Workspace teammates, roles, and status.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              href={canInviteMore ? "/company/invite" : undefined}
-              variant="secondary"
-              size="sm"
-              disabled={!canInviteMore || membersLoading}
-              title={seatLimit > 0 ? `${seatsRemaining} seats remaining` : "Seat limit not available yet"}
-            >
-              Invite members
-            </Button>
-            {membersLoading ? (
-              <div className="inline-flex items-center gap-2 rounded-full bg-[#f5f7fb] px-3 py-1.5 text-xs font-semibold text-[#4b5563]">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary-500" />
-                Syncing members…
-              </div>
-            ) : (
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#f5f7fb] px-3 py-1.5 text-xs font-semibold text-[#4b5563]">
-                <Users2 className="h-3.5 w-3.5 text-primary-500" />
-                {seatLimit > 0 ? `${seatsRemaining} seats left` : "Seat limit syncing"}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {membersError ? (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 shadow-sm">
-            <AlertTriangle className="h-4 w-4" />
-            <span className="text-sm font-semibold">{membersError}</span>
-          </div>
-        ) : null}
-
-        <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EEF2F7] bg-white">
-          <table className="min-w-full divide-y divide-[#EEF2F7] text-sm">
-            <thead className="bg-[#f8fafc] text-left text-xs font-semibold uppercase tracking-[0.12em] text-[#8a90a6]">
-              <tr>
-                <th className="px-4 py-3">Member</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Joined</th>
-                <th className="px-4 py-3">Last active</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F1F5F9] text-[#1f2a44]">
-              {membersLoading
-                ? Array.from({ length: 4 }).map((_, index) => (
-                    <tr key={`skeleton-${index}`} className="animate-pulse bg-white/60">
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <span className="h-9 w-9 rounded-full bg-[#eef2f7]" />
-                          <div className="space-y-2">
-                            <div className="h-3 w-28 rounded-full bg-[#eef2f7]" />
-                            <div className="h-3 w-16 rounded-full bg-[#eef2f7]" />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="h-3 w-20 rounded-full bg-[#eef2f7]" />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="h-3 w-16 rounded-full bg-[#eef2f7]" />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="h-3 w-20 rounded-full bg-[#eef2f7]" />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="h-3 w-20 rounded-full bg-[#eef2f7]" />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="h-3 w-16 rounded-full bg-[#eef2f7]" />
-                      </td>
-                    </tr>
-                  ))
-                : null}
-
-              {!membersLoading && members.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-[#6b7280]">
-                    No members found for this workspace yet.
-                  </td>
-                </tr>
-              ) : null}
-
-              {!membersLoading &&
-                members.map((member) => (
-                  <tr key={member.id} className="bg-white/70">
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-9 w-9 overflow-hidden rounded-full border border-[#e6dff5] bg-transparent text-sm font-semibold text-primary-700">
-                          <Image
-                            src={resolveAvatar(member.image)}
-                            alt={`${member.name ?? "Member"} avatar`}
-                            fill
-                            sizes="36px"
-                            className="object-cover"
-                          />
-                        </div>
-                        <div className="space-y-0.5">
-                          <p className="text-sm font-semibold text-[#1f2a44]">{member.name ?? "Unknown user"}</p>
-                          <p className="text-xs text-[#6b7280]">{member.email ?? "—"}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="inline-flex rounded-full bg-[#f5f7fb] px-3 py-1 text-xs font-semibold text-[#3D64FF]">
-                        {formatRole(member.role, member.isOwner)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={[
-                          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                          member.status === "ACTIVE"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : member.status === "PENDING"
-                            ? "bg-amber-50 text-amber-700"
-                            : "bg-[#f5f7fb] text-[#6b7280]",
-                        ].join(" ")}
-                      >
-                        {formatStatus(member.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-[#1f2a44]">{formatDate(member.createdAt)}</td>
-                    <td className="px-4 py-4 text-sm text-[#1f2a44]">{formatDate(member.lastActiveAt)}</td>
-                    <td className="px-4 py-4 text-right">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={<Eye className="h-4 w-4" />}
-                        onClick={() => openMemberModal(member.id)}
-                      >
-                        View
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       <MemberDetailsModal
         open={Boolean(selectedMember)}
@@ -1280,6 +914,11 @@ export default function CompanyPage() {
         canEditRole={canEditSelectedMemberRole}
         restrictionNote={roleRestrictionNote}
         roleOptions={roleOptions}
+        resolveAvatar={resolveAvatar}
+        formatRole={formatRole}
+        formatStatus={formatStatus}
+        formatDate={formatDate}
+        defaultAvatar={defaultAvatar}
       />
     </div>
   );

@@ -3,6 +3,7 @@ import {
   CreditLedgerType,
   MembershipStatus,
   PlanTier,
+  OrganizationStatus,
   PrismaClient,
   SubscriptionStatus,
   UserRole,
@@ -167,7 +168,7 @@ async function main() {
       update: {
         name,
         phone: user.phone,
-        title: user.title,
+        designation: user.designation,
         team: user.team,
         timezone: user.timezone,
         profileStatus: user.profileStatus,
@@ -182,7 +183,7 @@ async function main() {
         name,
         email: user.email,
         phone: user.phone,
-        title: user.title,
+        designation: user.designation,
         team: user.team,
         timezone: user.timezone,
         profileStatus: user.profileStatus,
@@ -222,6 +223,8 @@ async function main() {
         resumeAllotment,
         creditsBalance,
         billingEmail: org.billingEmail,
+        companyEmail: org.billingEmail ?? null,
+        status: OrganizationStatus.COMPLETED,
         logo: org.logo ?? '/logo/carriastic_logo.png',
       },
       create: {
@@ -231,6 +234,8 @@ async function main() {
         seatLimit,
         resumeAllotment,
         creditsBalance,
+        companyEmail: org.billingEmail ?? null,
+        status: OrganizationStatus.COMPLETED,
         logo: org.logo ?? '/logo/carriastic_logo.png',
       },
     });
@@ -238,27 +243,13 @@ async function main() {
     if (planDetails) {
       const renewsOn = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-      await prisma.organizationSubscription.upsert({
-        where: { id: `sub-${org.id}` },
-        update: {
-          plan: planTier,
-          planSlug: org.planSlug,
-          status: SubscriptionStatus.ACTIVE,
+      await prisma.organization.update({
+        where: { id: org.id },
+        data: {
+          subscriptionStatus: SubscriptionStatus.ACTIVE,
           billingCycle: BillingCycle.MONTHLY,
-          seats: seatLimit,
-          resumesIncluded: resumeAllotment,
           renewsOn,
-        },
-        create: {
-          id: `sub-${org.id}`,
-          organizationId: org.id,
-          plan: planTier,
-          planSlug: org.planSlug,
-          status: SubscriptionStatus.ACTIVE,
-          billingCycle: BillingCycle.MONTHLY,
-          seats: seatLimit,
-          resumesIncluded: resumeAllotment,
-          renewsOn,
+          startsOn: new Date(),
         },
       });
 
@@ -285,30 +276,14 @@ async function main() {
       continue;
     }
 
-    await prisma.membership.upsert({
-      where: {
-        userId_organizationId: {
-          userId: user.id,
-          organizationId: user.companyId,
-        },
-      },
-      update: {
-        role: user.role,
-        status: MembershipStatus.ACTIVE,
-        lastActiveAt: new Date(),
-      },
-      create: {
-        userId: user.id,
-        organizationId: user.companyId,
-        role: user.role as UserRole,
-        status: MembershipStatus.ACTIVE,
-        lastActiveAt: new Date(),
-      },
-    });
-
     await prisma.user.update({
       where: { email: user.email },
-      data: { defaultOrgId: user.companyId },
+      data: {
+        defaultOrgId: user.companyId,
+        role: user.role,
+        profileStatus: MembershipStatus.ACTIVE,
+        lastLoginAt: new Date(),
+      },
     });
   }
 

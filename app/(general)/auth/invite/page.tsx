@@ -11,9 +11,18 @@ type InvitationInfo = {
   email: string;
   role: string;
   organizationName: string;
+  organization?: {
+    name?: string | null;
+    website?: string | null;
+    domain?: string | null;
+    phone?: string | null;
+    size?: string | null;
+    companyEmail?: string | null;
+  };
   inviterName?: string | null;
   seatsRemaining: number | null;
   expiresAt: string;
+  name?: string;
 };
 
 export default function AcceptInvitePage() {
@@ -23,10 +32,14 @@ export default function AcceptInvitePage() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
+  const seatsUnavailable =
+    invitation?.seatsRemaining !== null && invitation?.seatsRemaining !== undefined && invitation.seatsRemaining <= 0;
 
   useEffect(() => {
     const load = async () => {
@@ -46,12 +59,17 @@ export default function AcceptInvitePage() {
           email: payload?.invitation?.email ?? "",
           role: payload?.invitation?.role ?? "COMPANY_MEMBER",
           organizationName: payload?.invitation?.organizationName ?? "Workspace",
+          organization: payload?.invitation?.organization,
           inviterName: payload?.invitation?.inviterName,
           seatsRemaining: payload?.invitation?.seatsRemaining ?? null,
           expiresAt: payload?.invitation?.expiresAt ?? "",
+          name: payload?.invitation?.name ?? "",
         };
 
         setInvitation(inviteData);
+        if (inviteData.name?.trim()) {
+          setName(inviteData.name);
+        }
       } catch (err) {
         console.error(err);
         setError(err instanceof Error ? err.message : "Unable to load invitation.");
@@ -80,7 +98,7 @@ export default function AcceptInvitePage() {
         const response = await fetch("/api/auth/invitations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, name, password }),
+          body: JSON.stringify({ token, name, password, designation, phone }),
         });
 
         const payload = await response.json();
@@ -143,6 +161,17 @@ export default function AcceptInvitePage() {
               </div>
             </div>
           </div>
+        ) : seatsUnavailable ? (
+          <div className="flex items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-card-soft">
+            <AlertTriangle className="h-5 w-5 mt-0.5" />
+            <div className="space-y-2 text-sm">
+              <p className="text-lg font-semibold">No seats available</p>
+              <p>
+                This workspace has reached its seat limit. Please ask the admin to free up or purchase seats before you
+                accept the invitation.
+              </p>
+            </div>
+          </div>
         ) : (
           <form
             onSubmit={handleSubmit}
@@ -163,6 +192,45 @@ export default function AcceptInvitePage() {
               </div>
             </div>
 
+            {invitation?.organization ? (
+              <div className="grid gap-3 rounded-2xl border border-[#EEF2F7] bg-[#f8fafc] p-4 text-xs text-[#4b5563] sm:grid-cols-2">
+                <div>
+                  <p className="font-semibold text-[#0f172a]">Company</p>
+                  <p>{invitation.organization.name ?? invitation.organizationName}</p>
+                </div>
+                {invitation.organization.companyEmail ? (
+                  <div>
+                    <p className="font-semibold text-[#0f172a]">Company email</p>
+                    <p>{invitation.organization.companyEmail}</p>
+                  </div>
+                ) : null}
+                {invitation.organization.phone ? (
+                  <div>
+                    <p className="font-semibold text-[#0f172a]">Phone</p>
+                    <p>{invitation.organization.phone}</p>
+                  </div>
+                ) : null}
+                {invitation.organization.size ? (
+                  <div>
+                    <p className="font-semibold text-[#0f172a]">Size</p>
+                    <p>{invitation.organization.size}</p>
+                  </div>
+                ) : null}
+                {invitation.organization.website ? (
+                  <div>
+                    <p className="font-semibold text-[#0f172a]">Website</p>
+                    <p>{invitation.organization.website}</p>
+                  </div>
+                ) : null}
+                {invitation.organization.domain ? (
+                  <div>
+                    <p className="font-semibold text-[#0f172a]">Domain</p>
+                    <p>{invitation.organization.domain}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <TextInput
               label="Full name"
               name="name"
@@ -173,6 +241,22 @@ export default function AcceptInvitePage() {
             />
 
             <TextInput label="Email" value={invitation?.email ?? ""} disabled helperText="From your invitation" />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextInput
+                label="Designation (optional)"
+                name="designation"
+                placeholder="Product Manager"
+                value={designation}
+                onChange={(event) => setDesignation(event.target.value)}
+              />
+              <TextInput
+                label="Phone (optional)"
+                name="phone"
+                placeholder="+880 1700 123 456"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+              />
+            </div>
 
             <div className="grid gap-5 sm:grid-cols-2">
               <PasswordInput

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
@@ -26,7 +26,25 @@ export default function ClientHeader({
   const [credits, setCredits] = useState<CreditPayload | null>(null);
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
   const defaultAvatar = "/images/default_dp.png";
+  const avatarBaseUrlRef = useRef((process.env.NEXT_PUBLIC_S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, ""));
+  const resolveAvatar = useCallback(
+    (value?: string | null) => {
+      const trimmed = value?.trim();
+      if (!trimmed) return defaultAvatar;
+      if (/^https?:\/\//.test(trimmed) || trimmed.startsWith("data:")) return trimmed;
+      const normalized = trimmed.replace(/^\/+/, "");
+      const normalizedStorage = normalized.replace(/^uploads\/profile-avatars\//, "uploads/profile-picture/");
+      if (normalizedStorage.startsWith("uploads/")) {
+        if (avatarBaseUrlRef.current) return `${avatarBaseUrlRef.current}/${normalizedStorage}`;
+        return `/${normalizedStorage}`;
+      }
+      if (trimmed.startsWith("/")) return trimmed;
+      return avatarBaseUrlRef.current ? `${avatarBaseUrlRef.current}/${normalizedStorage}` : `/${normalizedStorage}`;
+    },
+    [defaultAvatar]
+  );
   const [avatarSrc, setAvatarSrc] = useState(defaultAvatar);
+  const isFetchingAvatar = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -64,27 +82,37 @@ export default function ClientHeader({
   const creditUsage = credits?.total
     ? Math.min(100, Math.round((credits.remaining / credits.total) * 100))
     : 0;
-  useEffect(() => {
-    const raw = session?.user?.image?.trim();
-    if (!raw) {
-      setAvatarSrc(defaultAvatar);
-      return;
-    }
-    if (raw.startsWith("/")) {
-      setAvatarSrc(raw);
-      return;
-    }
+  const hydrateAvatarFromProfile = useCallback(async () => {
+    if (isFetchingAvatar.current) return;
+    isFetchingAvatar.current = true;
     try {
-      const url = new URL(raw);
-      if (url.protocol === "https:" || url.protocol === "http:") {
-        setAvatarSrc(raw);
-        return;
+      const response = await fetch("/api/profile", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json();
+      const imageFromApi = data?.imageUrl ?? data?.user?.image ?? null;
+      if (imageFromApi) {
+        setAvatarSrc(resolveAvatar(imageFromApi));
       }
     } catch {
-      // fall through
+      // ignore
+    } finally {
+      isFetchingAvatar.current = false;
     }
-    setAvatarSrc(defaultAvatar);
-  }, [session?.user?.image]);
+  }, [resolveAvatar]);
+
+  useEffect(() => {
+    setAvatarSrc(resolveAvatar(session?.user?.image ?? null));
+  }, [session?.user?.image, resolveAvatar]);
+
+  useEffect(() => {
+    const handler = () => {
+      hydrateAvatarFromProfile();
+    };
+    // Fetch once on mount for fresh avatar
+    handler();
+    window.addEventListener("profile:updated", handler);
+    return () => window.removeEventListener("profile:updated", handler);
+  }, [hydrateAvatarFromProfile]);
 
   return (
     <header className="rounded-xl border border-white/70 bg-gradient-to-r from-[#fbf8ff] via-[#f7f3ff] to-[#fbf9ff] p-4 shadow-[0_24px_55px_-34px_rgba(84,65,122,0.35)] backdrop-blur">

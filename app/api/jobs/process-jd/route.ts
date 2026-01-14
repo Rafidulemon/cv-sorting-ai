@@ -124,15 +124,17 @@ async function getSessionContext(request: NextRequest) {
     return { userId: null, organizationId: null };
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: tokenOrgId ? { userId, organizationId: tokenOrgId } : { userId },
-    orderBy: { createdAt: "asc" },
-    select: { organizationId: true },
-  });
-
   return {
     userId,
-    organizationId: tokenOrgId ?? membership?.organizationId ?? null,
+    organizationId:
+      tokenOrgId ??
+      (
+        await prisma.user.findUnique({
+          where: { id: userId },
+          select: { defaultOrgId: true },
+        })
+      )?.defaultOrgId ??
+      null,
   };
 }
 
