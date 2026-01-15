@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
       creditsBalance: true,
       resumeAllotment: true,
       renewsOn: true,
+      subscriptionStatus: true,
     },
   });
 
@@ -68,7 +69,9 @@ export async function GET(request: NextRequest) {
     total,
     used,
     plan: planName,
+    planSlug,
     planTier: organization?.planTier ?? null,
     renewsOn,
+    subscriptionStatus: organization?.subscriptionStatus ?? null,
   });
 }

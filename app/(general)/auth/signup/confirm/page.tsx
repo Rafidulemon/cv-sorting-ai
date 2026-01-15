@@ -31,15 +31,16 @@ export default function ConfirmSignupPage() {
   const router = useRouter();
   const { status, data: session } = useSession();
   const token = searchParams.get("token");
+  const paymentStatus = searchParams.get("payment");
   const [signup, setSignup] = useState<SignupInfo | null>(null);
   const [plans, setPlans] = useState<PricingPlan[]>(pricingPlans);
   const [selectedPlan, setSelectedPlan] = useState("standard");
   const [billingEmail, setBillingEmail] = useState("");
-  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ invoiceNumber: string; organizationSlug: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
+  const [isPaymentPending, setIsPaymentPending] = useState(false);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -47,6 +48,14 @@ export default function ConfirmSignupPage() {
       router.replace(role === "SUPER_ADMIN" ? "/admin" : "/dashboard");
     }
   }, [status, session, router]);
+
+  useEffect(() => {
+    if (paymentStatus === "failed") {
+      setError("Payment was not completed. Please try again.");
+    } else if (paymentStatus === "error") {
+      setError("We could not verify the payment. Please try again or contact support.");
+    }
+  }, [paymentStatus]);
 
   useEffect(() => {
     const load = async () => {
@@ -102,13 +111,9 @@ export default function ConfirmSignupPage() {
   const planPrice = selectedPlanDetails?.price ?? 0;
   const requiresPayment = planPrice > 0 && selectedPlan !== "free";
 
-  const handleSubmit = () => {
+  const handleFinalize = () => {
     if (!token) {
       setError("Missing signup token. Please use the link from your email.");
-      return;
-    }
-    if (requiresPayment && !paymentConfirmed) {
-      setError("Please confirm payment before completing signup.");
       return;
     }
 
@@ -122,7 +127,7 @@ export default function ConfirmSignupPage() {
             token,
             planSlug: selectedPlan,
             billingEmail,
-            paymentConfirmed: !requiresPayment || paymentConfirmed,
+            paymentConfirmed: true,
           }),
         });
 
@@ -142,10 +147,60 @@ export default function ConfirmSignupPage() {
     });
   };
 
+  const handlePayment = async () => {
+    if (!token) {
+      setError("Missing signup token. Please use the link from your email.");
+      return;
+    }
+    if (!requiresPayment) {
+      handleFinalize();
+      return;
+    }
+
+    setError("");
+    setIsPaymentPending(true);
+    try {
+      const response = await fetch("/api/sslcommerz/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          planSlug: selectedPlan,
+          billingEmail,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Unable to start payment right now.");
+      }
+
+      const gatewayUrl = payload?.gatewayUrl;
+      if (!gatewayUrl) {
+        throw new Error("Payment gateway did not return a redirect URL.");
+      }
+
+      window.location.href = gatewayUrl;
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Unable to start payment right now.");
+      setIsPaymentPending(false);
+    }
+  };
+
   const planCards = plans.map((plan) => ({
     ...plan,
     seats: plan.team ?? planSeatDefaults[plan.slug] ?? null,
   }));
+
+  const actionLabel = requiresPayment
+    ? isPaymentPending
+      ? "Redirecting to SSLCommerz…"
+      : "Pay with SSLCommerz"
+    : isPending
+      ? "Finalizing…"
+      : "Confirm plan & send invoice";
+  const actionDisabled = isPending || isPaymentPending;
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-white via-[#f0f7ff] to-[#f6f3ff]">
@@ -172,12 +227,12 @@ export default function ConfirmSignupPage() {
             <Loader2 className="h-5 w-5 animate-spin text-primary-600" />
             <span className="ml-3 text-sm font-semibold text-[#0f172a]">Loading signup details…</span>
           </div>
-        ) : error ? (
+        ) : !signup ? (
           <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
             <AlertTriangle className="h-5 w-5" />
             <div className="text-sm">
               <p className="font-semibold">We hit a snag</p>
-              <p>{error}</p>
+              <p>{error || "Unable to load signup details."}</p>
             </div>
           </div>
         ) : signup?.status === "COMPLETED" ? (
@@ -336,18 +391,13 @@ export default function ConfirmSignupPage() {
               </div>
 
               {requiresPayment ? (
-                <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-[#0f172a]">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 rounded border-zinc-300 text-primary-500"
-                    checked={paymentConfirmed}
-                    onChange={(event) => setPaymentConfirmed(event.target.checked)}
-                  />
+                <div className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-[#0f172a]">
+                  <CreditCard className="mt-1 h-4 w-4 text-primary-600" />
                   <span>
-                    I confirm payment for this invoice or have approval to proceed. An invoice will also be emailed to{" "}
+                    You&apos;ll be redirected to SSLCommerz to complete payment securely. An invoice will also be emailed to{" "}
                     {billingEmail || signup?.email}.
                   </span>
-                </label>
+                </div>
               ) : (
                 <div className="flex items-center gap-3 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-900">
                   <CheckCircle2 className="h-4 w-4" />
@@ -365,11 +415,11 @@ export default function ConfirmSignupPage() {
               <Button
                 type="button"
                 fullWidth
-                rightIcon={isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                disabled={isPending || (requiresPayment && !paymentConfirmed)}
-                onClick={handleSubmit}
+                rightIcon={actionDisabled ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                disabled={actionDisabled}
+                onClick={requiresPayment ? handlePayment : handleFinalize}
               >
-                {isPending ? "Finalizing…" : "Confirm plan & send invoice"}
+                {actionLabel}
               </Button>
             </div>
           </div>

@@ -622,7 +622,7 @@ export default function CompanyPage() {
   }, [initialData]);
 
   const globalLoading = (
-    <div className="fixed inset-0 z-50">
+    <div className="">
       <ClientLayoutLoading />
     </div>
   );

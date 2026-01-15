@@ -13,6 +13,16 @@ const bodySchema = z.object({
   planSlug: z.string().trim().min(2, "Plan is required"),
   billingEmail: z.string().trim().email("A billing contact is required"),
   paymentConfirmed: z.boolean().optional(),
+  paymentReference: z
+    .object({
+      provider: z.string().trim().min(1),
+      transactionId: z.string().trim().min(3),
+      validationId: z.string().trim().min(3),
+      amount: z.coerce.number().optional(),
+      currency: z.string().trim().min(1).optional(),
+      cardType: z.string().trim().optional(),
+    })
+    .optional(),
 });
 
 const planDefaults: Record<
@@ -43,6 +53,52 @@ function resolvePlanTier(slug: string): PlanTier {
   return PlanTier.STANDARD;
 }
 
+async function validateSslcommerzPayment(transactionId: string, validationId: string, expectedAmount: number) {
+  const storeId = process.env.SSLCOMMERZ_STORE_ID?.trim();
+  const storePassword = process.env.SSLCOMMERZ_STORE_PASSWORD?.trim();
+  const validationApi =
+    process.env.SSLCOMMERZ_VALIDATION_API_WEB?.trim() ??
+    process.env.SSLCOMMERZ_VALIDATION_API?.trim();
+
+  if (!storeId || !storePassword || !validationApi) {
+    throw new Error("SSLCommerz validation is not configured");
+  }
+
+  const url = new URL(validationApi);
+  url.searchParams.set("val_id", validationId);
+  url.searchParams.set("store_id", storeId);
+  url.searchParams.set("store_passwd", storePassword);
+  url.searchParams.set("format", "json");
+
+  const response = await fetch(url.toString(), { method: "GET" });
+  if (!response.ok) {
+    throw new Error("Validation request failed");
+  }
+
+  const payload = await response.json();
+  const status = (payload?.status ?? "").toString();
+  if (status !== "VALID" && status !== "VALIDATED") {
+    return { valid: false, payload };
+  }
+
+  const validatedAmount = Number.parseFloat(payload?.amount ?? "0");
+  if (!Number.isFinite(validatedAmount) || Math.abs(validatedAmount - expectedAmount) > 0.5) {
+    return { valid: false, payload };
+  }
+
+  const validatedTranId = (payload?.tran_id ?? "").toString();
+  if (validatedTranId && validatedTranId !== transactionId) {
+    return { valid: false, payload };
+  }
+
+  const currency = (payload?.currency_type ?? payload?.currency ?? "").toString();
+  if (currency && currency !== "BDT") {
+    return { valid: false, payload };
+  }
+
+  return { valid: true, payload };
+}
+
 export async function POST(request: NextRequest) {
   let payload: unknown;
   try {
@@ -56,7 +112,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid completion details", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { token, planSlug, billingEmail, paymentConfirmed } = parsed.data;
+  const { token, planSlug, billingEmail, paymentReference } = parsed.data;
 
   const verification = await prisma.verificationToken.findUnique({ where: { token } });
   if (!verification) {
@@ -146,8 +202,29 @@ export async function POST(request: NextRequest) {
   const planPrice = typeof (planDetails as any)?.price === "number" ? (planDetails as any).price : 0;
   const requiresPayment = planPrice > 0;
 
-  if (requiresPayment && !paymentConfirmed) {
-    return NextResponse.json({ error: "Please confirm payment to finalize signup." }, { status: 400 });
+  if (requiresPayment) {
+    if (!paymentReference?.transactionId || !paymentReference?.validationId) {
+      return NextResponse.json(
+        { error: "Payment verification required. Please complete payment to finalize signup." },
+        { status: 400 },
+      );
+    }
+    if (paymentReference.provider !== "SSLCOMMERZ") {
+      return NextResponse.json({ error: "Unsupported payment provider." }, { status: 400 });
+    }
+    try {
+      const validation = await validateSslcommerzPayment(
+        paymentReference.transactionId,
+        paymentReference.validationId,
+        planPrice,
+      );
+      if (!validation.valid) {
+        return NextResponse.json({ error: "Payment could not be verified. Please try again." }, { status: 400 });
+      }
+    } catch (error) {
+      console.error("[auth/signup/complete] Payment validation failed", error);
+      return NextResponse.json({ error: "Unable to verify payment right now." }, { status: 502 });
+    }
   }
 
   const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
@@ -170,6 +247,9 @@ export async function POST(request: NextRequest) {
         renewsOn,
         startsOn: organization.startsOn ?? new Date(),
         status: "COMPLETED",
+        provider: paymentReference?.provider ?? organization.provider,
+        externalSubscriptionId: paymentReference?.transactionId ?? organization.externalSubscriptionId,
+        externalCustomerId: paymentReference?.validationId ?? organization.externalCustomerId,
       },
       include: { owner: true },
     });

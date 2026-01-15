@@ -581,7 +581,7 @@ export default function ProfilePage() {
   };
 
   const globalLoading = (
-    <div className="fixed inset-0 z-50">
+    <div>
       <ClientLayoutLoading />
     </div>
   );

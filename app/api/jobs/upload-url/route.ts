@@ -329,7 +329,7 @@ export async function POST(request: NextRequest) {
     if (purpose === "job-description" && (!context.userId || !context.organizationId)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if ((purpose === "company-logo" || purpose === "profile-avatar") && !context.userId) {
+    if (purpose === "profile-avatar" && !context.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
