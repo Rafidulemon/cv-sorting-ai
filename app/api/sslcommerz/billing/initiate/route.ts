@@ -15,6 +15,17 @@ const initSchema = z.object({
   planSlug: z.string().trim().optional(),
   credits: z.number().int().positive().optional(),
   billingEmail: z.string().trim().email().optional(),
+  paymentDetails: z
+    .object({
+      method: z.string().trim().optional(),
+      provider: z.string().trim().optional(),
+      accountName: z.string().trim().optional(),
+      accountNumber: z.string().trim().optional(),
+      routingNumber: z.string().trim().optional(),
+      mobileWallet: z.string().trim().optional(),
+      notes: z.string().trim().optional(),
+    })
+    .optional(),
 });
 
 const planDefaults: Record<string, { tier: PlanTier; seats: number; resumeAllotment: number; credits: number }> = {
@@ -115,7 +126,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid payment details", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { action, planSlug: requestedPlanSlug, credits, billingEmail } = parsed.data;
+  const { action, planSlug: requestedPlanSlug, credits, billingEmail, paymentDetails } = parsed.data;
   const token = await getToken({
     req: request,
     secret: authSecret,
@@ -148,6 +159,7 @@ export async function POST(request: NextRequest) {
       region: true,
       phone: true,
       owner: { select: { name: true, phone: true } },
+      paymentDetails: true,
     },
   });
 
@@ -191,6 +203,7 @@ export async function POST(request: NextRequest) {
         renewsOn,
         status: "COMPLETED",
         startsOn: new Date(),
+        paymentDetails: paymentDetails ?? organization.paymentDetails ?? undefined,
       },
     });
 
@@ -248,6 +261,14 @@ export async function POST(request: NextRequest) {
     value_c: valueC,
     value_d: organization.id,
   });
+
+  // Persist payment preference on org for reconciliation/billing.
+  if (paymentDetails) {
+    await prisma.organization.update({
+      where: { id: organization.id },
+      data: { paymentDetails },
+    });
+  }
 
   let apiResponse: any = null;
   try {

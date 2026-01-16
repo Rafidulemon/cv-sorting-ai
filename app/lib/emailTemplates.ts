@@ -210,3 +210,56 @@ export function buildMemberInvitationEmail(params: {
 
   return { subject, html, text };
 }
+
+export function buildPaymentReceiptEmail(params: {
+  companyName: string;
+  planName: string;
+  amountBdt: number;
+  credits: number;
+  invoiceNumber: string;
+  billingEmail: string;
+  issuedAt: Date;
+}) {
+  const currency = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", maximumFractionDigits: 0 }).format(params.amountBdt);
+  const subject = `Invoice ${params.invoiceNumber} — ${params.companyName}`;
+  const issued = formatDate(params.issuedAt);
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:700px;margin:0 auto;padding:24px;color:#0f172a;background:#f8fafc;">
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:22px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h2 style="margin:0;font-size:20px;color:#0f172a;">Invoice ${params.invoiceNumber}</h2>
+          <span style="background:#ecfdf3;color:#166534;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:700;">Paid</span>
+        </div>
+        <p style="margin:0 0 12px;color:#334155;">Thank you for your payment. Here are the details for ${params.companyName}.</p>
+        <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+          <tr>
+            <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Plan</td>
+            <td style="padding:10px;border:1px solid #e2e8f0;">${params.planName}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Credits</td>
+            <td style="padding:10px;border:1px solid #e2e8f0;">${params.credits.toLocaleString("en-US")} credits</td>
+          </tr>
+          <tr>
+            <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Amount</td>
+            <td style="padding:10px;border:1px solid #e2e8f0;">${currency}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Billing contact</td>
+            <td style="padding:10px;border:1px solid #e2e8f0;">${params.billingEmail}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Issued</td>
+            <td style="padding:10px;border:1px solid #e2e8f0;">${issued}</td>
+          </tr>
+        </table>
+        <p style="margin:12px 0 0;color:#475569;font-size:13px;">If you did not authorize this payment, contact billing@carrix.ai.</p>
+      </div>
+      <p style="color:#475569;font-size:12px;margin:14px 0 0;">${brand.footer}</p>
+    </div>
+  `;
+
+  const text = `Invoice ${params.invoiceNumber}\nPlan: ${params.planName}\nCredits: ${params.credits}\nAmount: ${currency}\nBilling contact: ${params.billingEmail}\nIssued: ${issued}\n\n${brand.footer}`;
+  return { subject, html, text };
+}

@@ -19,6 +19,7 @@ export type PricingPlan = {
   ocr: string;
   semanticSearch: boolean;
   sortOrder?: number;
+  creditBundles?: CreditBundle[];
 };
 
 export type CreditUsageRow = {
@@ -31,6 +32,32 @@ export type FreePlanNudge = {
   bullets: string[];
   banner: string;
 };
+
+export type CreditBundle = {
+  id?: string;
+  name: string;
+  credits: number;
+  isPopular?: boolean;
+  sortOrder?: number;
+};
+
+const defaultCreditBundles: CreditBundle[] = [
+  {
+    name: "Starter boost",
+    credits: 250,
+    isPopular: false,
+  },
+  {
+    name: "Growth",
+    credits: 750,
+    isPopular: true,
+  },
+  {
+    name: "Scale",
+    credits: 2000,
+    isPopular: false,
+  },
+];
 
 export const pricingPlans: PricingPlan[] = [
   {
@@ -57,6 +84,7 @@ export const pricingPlans: PricingPlan[] = [
     aiJd: false,
     ocr: "No",
     semanticSearch: false,
+    creditBundles: defaultCreditBundles,
   },
   {
     slug: "standard",
@@ -89,6 +117,7 @@ export const pricingPlans: PricingPlan[] = [
     aiJd: true,
     ocr: "Quota-based",
     semanticSearch: true,
+    creditBundles: defaultCreditBundles,
   },
   {
     slug: "premium",
@@ -119,6 +148,7 @@ export const pricingPlans: PricingPlan[] = [
     aiJd: true,
     ocr: "High-volume",
     semanticSearch: true,
+    creditBundles: defaultCreditBundles,
   },
 ];
 
@@ -127,6 +157,10 @@ export const creditUsageRows: CreditUsageRow[] = [
   { action: "Ask AI about CV", credits: "1" },
   { action: "AI Job Description", credits: "2" },
   { action: "OCR (scanned CV)", credits: "1" },
+];
+
+export const creditBundles: CreditBundle[] = [
+  ...defaultCreditBundles,
 ];
 
 export const freePlanNudge: FreePlanNudge = {

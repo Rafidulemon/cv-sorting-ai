@@ -101,6 +101,7 @@ export async function PUT(request: NextRequest) {
           ocr: plan.ocr,
           semanticSearch: plan.semanticSearch,
           sortOrder: index,
+          creditBundles: plan.creditBundles ?? [],
         },
         create: {
           slug: plan.slug,
@@ -123,6 +124,7 @@ export async function PUT(request: NextRequest) {
           ocr: plan.ocr,
           semanticSearch: plan.semanticSearch,
           sortOrder: index,
+          creditBundles: plan.creditBundles ?? [],
         },
       });
     }

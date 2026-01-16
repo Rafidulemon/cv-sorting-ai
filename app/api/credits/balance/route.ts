@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
       plan: null,
       planTier: null,
       renewsOn: null,
+      topUpRate: null,
     });
   }
 
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   const orgId = user?.defaultOrgId ?? null;
   if (!orgId) {
     return NextResponse.json(
-      { remaining: 0, total: 0, plan: "No org", planTier: null, renewsOn: null },
+      { remaining: 0, total: 0, plan: "No org", planTier: null, renewsOn: null, topUpRate: null },
       { status: 200 },
     );
   }
@@ -63,6 +64,7 @@ export async function GET(request: NextRequest) {
   const used = Math.max(0, total - remaining);
   const planName = pricingPlan?.name ?? organization?.planTier ?? "Plan";
   const renewsOn = organization?.renewsOn ?? null;
+  const topUpRate = typeof pricingPlan?.topUp === "number" ? pricingPlan.topUp : null;
 
   return NextResponse.json({
     remaining,
@@ -73,5 +75,6 @@ export async function GET(request: NextRequest) {
     planTier: organization?.planTier ?? null,
     renewsOn,
     subscriptionStatus: organization?.subscriptionStatus ?? null,
+    topUpRate,
   });
 }

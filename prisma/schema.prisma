@@ -202,6 +202,7 @@ model Organization {
   provider           String?
   externalCustomerId     String?
   externalSubscriptionId String?
+  paymentDetails Json?
   status          OrganizationStatus @default(PENDING)
   seatLimit       Int          @default(1)
   resumeAllotment Int          @default(10)
@@ -288,6 +289,7 @@ model PricingPlan {
   ocr             String   @default("No")
   semanticSearch  Boolean  @default(false)
   sortOrder       Int      @default(0)
+  creditBundles   Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

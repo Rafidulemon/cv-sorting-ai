@@ -1,3 +1,21 @@
+export const creditBundles = [
+  {
+    name: "Starter boost",
+    credits: 250,
+    isPopular: false,
+  },
+  {
+    name: "Growth",
+    credits: 750,
+    isPopular: true,
+  },
+  {
+    name: "Scale",
+    credits: 2000,
+    isPopular: false,
+  },
+];
+
 export const pricingPlans = [
   {
     slug: "free",
@@ -24,6 +42,7 @@ export const pricingPlans = [
     aiJd: false,
     ocr: "No",
     semanticSearch: false,
+    creditBundles,
   },
   {
     slug: "standard",
@@ -56,6 +75,7 @@ export const pricingPlans = [
     aiJd: true,
     ocr: "Quota-based",
     semanticSearch: true,
+    creditBundles,
   },
   {
     slug: "premium",
@@ -87,6 +107,7 @@ export const pricingPlans = [
     aiJd: true,
     ocr: "High-volume",
     semanticSearch: true,
+    creditBundles,
   },
 ];
 

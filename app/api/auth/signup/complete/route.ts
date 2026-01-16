@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { BillingCycle, MembershipStatus, PlanTier, SubscriptionStatus } from "@prisma/client";
+import { BillingCycle, MembershipStatus, PlanTier, SubscriptionStatus, CreditLedgerType } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 import { pricingPlans } from "@/app/data/pricing";
 import { sendEmail } from "@/app/lib/mailer";
@@ -201,6 +201,12 @@ export async function POST(request: NextRequest) {
   const planName = (planDetails as any)?.name ?? planSlug;
   const planPrice = typeof (planDetails as any)?.price === "number" ? (planDetails as any).price : 0;
   const requiresPayment = planPrice > 0;
+  const paymentProvider = paymentReference?.provider?.trim();
+  const providerCode = paymentProvider?.toUpperCase();
+  const referenceType =
+    providerCode === "SSLCOMMERZ"
+      ? "SSLCommerz"
+      : paymentProvider ?? (requiresPayment ? "SSLCommerz" : "Signup");
 
   if (requiresPayment) {
     if (!paymentReference?.transactionId || !paymentReference?.validationId) {
@@ -209,7 +215,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    if (paymentReference.provider !== "SSLCOMMERZ") {
+    if (providerCode !== "SSLCOMMERZ") {
       return NextResponse.json({ error: "Unsupported payment provider." }, { status: 400 });
     }
     try {
@@ -229,6 +235,7 @@ export async function POST(request: NextRequest) {
 
   const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
   const dashboardUrl = new URL("/dashboard", request.nextUrl.origin).toString();
+  const referenceId = paymentReference?.transactionId ?? invoiceNumber;
 
   const result = await prisma.$transaction(async (tx) => {
     const renewsOn = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -247,12 +254,25 @@ export async function POST(request: NextRequest) {
         renewsOn,
         startsOn: organization.startsOn ?? new Date(),
         status: "COMPLETED",
-        provider: paymentReference?.provider ?? organization.provider,
+        provider: providerCode ?? paymentReference?.provider ?? organization.provider,
         externalSubscriptionId: paymentReference?.transactionId ?? organization.externalSubscriptionId,
         externalCustomerId: paymentReference?.validationId ?? organization.externalCustomerId,
       },
       include: { owner: true },
     });
+
+    if (requiresPayment) {
+      await tx.creditLedger.create({
+        data: {
+          organizationId: organization.id,
+          amount: creditsBalance,
+          type: CreditLedgerType.ALLOTMENT,
+          referenceType,
+          referenceId,
+          description: `Signup ${planName} plan (${planSlug})`,
+        },
+      });
+    }
 
     await tx.user.update({
       where: { id: organization.ownerId },

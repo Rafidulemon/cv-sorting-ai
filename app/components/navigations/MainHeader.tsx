@@ -66,6 +66,8 @@ const Header = ({ isDark = false }: HeaderProps) => {
 
     let observer: IntersectionObserver | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let scrollListenerAttached = false;
+    let handleScroll: (() => void) | null = null;
 
     const updateVisibilityFromRect = (heroEl: HTMLElement) => {
       const rect = heroEl.getBoundingClientRect();
@@ -78,8 +80,23 @@ const Header = ({ isDark = false }: HeaderProps) => {
 
     const attachObserver = (heroEl: HTMLElement) => {
       updateVisibilityFromRect(heroEl);
+      // Manual scroll/resize handler to keep the header in sync even if IntersectionObserver misses a tick.
+      handleScroll = () => updateVisibilityFromRect(heroEl);
+      window.addEventListener("scroll", handleScroll, { passive: true });
+      window.addEventListener("resize", handleScroll);
+      scrollListenerAttached = true;
+
       observer = new IntersectionObserver(
-        ([entry]) => setIsHeroActive(entry.isIntersecting),
+        ([entry]) => {
+          // Fallback to rect checks to avoid false negatives on initial load.
+          const rect = entry.boundingClientRect;
+          const viewportHeight = window.innerHeight || 0;
+          const topOffset = 96;
+          const isVisible =
+            entry.isIntersecting ||
+            (rect.top < viewportHeight - topOffset && rect.bottom > topOffset);
+          setIsHeroActive(isVisible);
+        },
         { threshold: 0.25, rootMargin: "-96px 0px 0px 0px" }
       );
       observer.observe(heroEl);
@@ -101,6 +118,10 @@ const Header = ({ isDark = false }: HeaderProps) => {
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
       observer?.disconnect();
+      if (scrollListenerAttached && handleScroll) {
+        window.removeEventListener("scroll", handleScroll);
+        window.removeEventListener("resize", handleScroll);
+      }
     };
   }, [isDark, pathname]);
 

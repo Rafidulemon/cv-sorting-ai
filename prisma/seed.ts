@@ -81,6 +81,7 @@ async function main() {
         ocr: plan.ocr,
         semanticSearch: plan.semanticSearch,
         sortOrder: index,
+        creditBundles: plan.creditBundles ?? [],
       },
       create: {
         slug: plan.slug,
@@ -103,6 +104,7 @@ async function main() {
         ocr: plan.ocr,
         semanticSearch: plan.semanticSearch,
         sortOrder: index,
+        creditBundles: plan.creditBundles ?? [],
       },
     });
   }

@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import ClientLayoutLoading from "@/app/components/loading/ClientLayoutLoading";
-import { pricingPlans, type PricingPlan } from "@/app/data/pricing";
+import { creditBundles as defaultCreditBundles, pricingPlans, type PricingPlan } from "@/app/data/pricing";
+import { InvoiceModal } from "@/app/components/credits/InvoiceModal";
+import { Pagination } from "@/app/components/Pagination";
 
 type Bundle = {
   id: string;
@@ -27,6 +29,14 @@ type Bundle = {
   popular?: boolean;
 };
 
+type CreditBundlePayload = {
+  id?: string;
+  name: string;
+  credits: number;
+  isPopular?: boolean;
+  sortOrder?: number;
+};
+
 type CreditBalance = {
   remaining: number;
   total: number;
@@ -35,6 +45,18 @@ type CreditBalance = {
   planTier?: string | null;
   renewsOn?: string | null;
   subscriptionStatus?: string | null;
+  topUpRate?: number | null;
+};
+
+type BillingEntry = {
+  id: string;
+  credits: number;
+  type: string;
+  description: string | null;
+  referenceId: string | null;
+  referenceType: string | null;
+  createdAt: string;
+  estimatedBdt: number | null;
 };
 
 type PaymentAction = "plan" | "topup" | "invoice";
@@ -43,8 +65,6 @@ type FlashMessage = {
   type: "success" | "error";
   text: string;
 };
-
-const bundleCredits = [250, 750, 2000];
 
 export default function CreditsPage() {
   const searchParams = useSearchParams();
@@ -55,7 +75,7 @@ export default function CreditsPage() {
   const role = (session as any)?.user?.role as string | undefined;
   const isCompanyAdmin = role === "COMPANY_ADMIN";
 
-  const [selectedBundleCredits, setSelectedBundleCredits] = useState<number>(bundleCredits[1]);
+  const [selectedBundleCredits, setSelectedBundleCredits] = useState<number | null>(null);
   const [selectedPlanSlug, setSelectedPlanSlug] = useState<string>("standard");
   const [processingAction, setProcessingAction] = useState<PaymentAction | null>(null);
   const [flashMessage, setFlashMessage] = useState<FlashMessage | null>(null);
@@ -67,6 +87,14 @@ export default function CreditsPage() {
   const [plans, setPlans] = useState<PricingPlan[]>(pricingPlans);
   const [plansLoading, setPlansLoading] = useState(true);
   const [plansError, setPlansError] = useState("");
+  const [fallbackBundles, setFallbackBundles] = useState<CreditBundlePayload[]>(defaultCreditBundles);
+  const [creditsToBuy, setCreditsToBuy] = useState<number | null>(null);
+  const [billingHistory, setBillingHistory] = useState<BillingEntry[]>([]);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingError, setBillingError] = useState("");
+  const [selectedInvoice, setSelectedInvoice] = useState<BillingEntry | null>(null);
+  const [billingPage, setBillingPage] = useState(1);
+  const billingPageSize = 10;
 
   useEffect(() => {
     if (paymentStatus === "success") {
@@ -115,11 +143,14 @@ export default function CreditsPage() {
       if (!response.ok) throw new Error("Failed to load pricing");
       const payload = await response.json();
       const planList = Array.isArray(payload?.plans) && payload.plans.length ? payload.plans : pricingPlans;
+      const bundleList = Array.isArray(payload?.creditBundles) ? payload.creditBundles : [];
       setPlans(planList);
+      setFallbackBundles(bundleList.length ? bundleList : defaultCreditBundles);
     } catch (error) {
       console.error(error);
       setPlansError("Unable to load pricing plans");
       setPlans(pricingPlans);
+      setFallbackBundles(defaultCreditBundles);
     } finally {
       setPlansLoading(false);
     }
@@ -136,6 +167,32 @@ export default function CreditsPage() {
     }
   }, [balance?.planSlug]);
 
+  useEffect(() => {
+    if (sessionStatus !== "authenticated" || !isCompanyAdmin) {
+      setBillingLoading(false);
+      return;
+    }
+    const loadBilling = async () => {
+      setBillingLoading(true);
+      setBillingError("");
+      try {
+        const res = await fetch("/api/credits/history");
+        if (!res.ok) throw new Error("Failed to load billing history");
+        const payload = await res.json();
+        const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+        setBillingHistory(entries);
+        setBillingPage(1);
+      } catch (error) {
+        console.error(error);
+        setBillingError("Unable to load billing history");
+        setBillingHistory([]);
+      } finally {
+        setBillingLoading(false);
+      }
+    };
+    loadBilling();
+  }, [isCompanyAdmin, sessionStatus]);
+
   const planList = plans.length ? plans : pricingPlans;
   const currentPlan =
     planList.find((plan) => plan.slug === balance?.planSlug) ??
@@ -145,27 +202,146 @@ export default function CreditsPage() {
   const isPlanChangeDisabled =
     !selectedPlan?.slug || selectedPlan?.slug === balance?.planSlug || processingAction === "plan";
 
-  const topUpRate = currentPlan?.topUp ?? 200;
+  const normalizeBundles = useCallback((bundles: any[]): CreditBundlePayload[] => {
+    if (!Array.isArray(bundles)) return [];
+    return bundles
+      .map((item) => (item && typeof item === "object" ? item : null))
+      .filter(Boolean)
+      .map((item: any) => ({
+        id: typeof item.id === "string" ? item.id : undefined,
+        name: typeof item.name === "string" ? item.name : "",
+        credits: typeof item.credits === "number" ? item.credits : Number(item.credits) || 0,
+        isPopular: Boolean(item.isPopular),
+        sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : undefined,
+      }))
+      .filter((item) => item.name && item.credits > 0);
+  }, []);
+
+  const planBundles = useMemo(() => {
+    const fromPlan = normalizeBundles((currentPlan as any)?.creditBundles ?? []);
+    if (fromPlan.length) return fromPlan;
+    const selectedPlanBundles = normalizeBundles((selectedPlan as any)?.creditBundles ?? []);
+    if (selectedPlanBundles.length) return selectedPlanBundles;
+    return normalizeBundles(fallbackBundles);
+  }, [currentPlan, fallbackBundles, normalizeBundles, selectedPlan]);
+
+  const topUpRate = balance?.topUpRate ?? currentPlan?.topUp ?? null;
   const bundleOptions: Bundle[] = useMemo(() => {
-    return bundleCredits.map((credits, index) => {
-      const price = Math.round((credits / 100) * topUpRate);
+    if (!planBundles.length || topUpRate === null) return [];
+    return planBundles.map((bundle) => {
+      const price = Math.round((bundle.credits / 100) * topUpRate);
       const perCredit = topUpRate / 100;
       return {
-        id: `bundle-${credits}`,
-        name: index === 0 ? "Starter boost" : index === 1 ? "Growth" : "Scale",
-        credits,
+        id: bundle.id ?? `bundle-${bundle.credits}`,
+        name: bundle.name,
+        credits: bundle.credits,
         price,
         perCredit,
-        popular: credits === bundleCredits[1],
+        popular: bundle.isPopular,
       };
     });
-  }, [topUpRate]);
+  }, [planBundles, topUpRate]);
 
-  const selectedBundle = bundleOptions.find((bundle) => bundle.credits === selectedBundleCredits) ?? bundleOptions[0];
+  useEffect(() => {
+    if (!bundleOptions.length) return;
+    setSelectedBundleCredits((current) => {
+      const hasCurrent = current && bundleOptions.some((bundle) => bundle.credits === current);
+      const nextCredits = hasCurrent
+        ? current
+        : (bundleOptions.find((bundle) => bundle.popular) ?? bundleOptions[0])?.credits ?? null;
+      setCreditsToBuy((prev) => {
+        if (prev && bundleOptions.some((bundle) => bundle.credits === prev)) return prev;
+        return nextCredits;
+      });
+      return nextCredits;
+    });
+  }, [bundleOptions]);
+
+  const selectedBundle =
+    (selectedBundleCredits
+      ? bundleOptions.find((bundle) => bundle.credits === selectedBundleCredits)
+      : undefined) ?? bundleOptions[0];
+  const effectiveCredits = creditsToBuy ?? selectedBundle?.credits ?? null;
+  const calculatedPrice =
+    topUpRate !== null && effectiveCredits !== null ? Math.round((effectiveCredits / 100) * topUpRate) : null;
   const balanceUsage = balance?.total ? Math.min(100, Math.round((balance.remaining / balance.total) * 100)) : 0;
   const renewalDate = balance?.renewsOn ? new Date(balance.renewsOn).toLocaleDateString() : null;
   const invoiceAmount = currentPlan?.price ?? 0;
   const subscriptionStatus = balance?.subscriptionStatus ?? "";
+  const formatDate = (value: string) =>
+    new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  const formatCurrency = (value: number | null | undefined) =>
+    typeof value === "number" ? `BDT ${value.toLocaleString()}` : "—";
+  const openInvoicePreview = (entry: BillingEntry) => setSelectedInvoice(entry);
+  const closeInvoicePreview = () => setSelectedInvoice(null);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (selectedInvoice) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [selectedInvoice]);
+  const pagedBilling = useMemo(() => {
+    const startIndex = (billingPage - 1) * billingPageSize;
+    const endIndex = startIndex + billingPageSize;
+    return billingHistory.slice(startIndex, endIndex);
+  }, [billingHistory, billingPage]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(billingHistory.length / billingPageSize));
+    if (billingPage > totalPages) {
+      setBillingPage(totalPages);
+    }
+  }, [billingHistory.length, billingPage, billingPageSize]);
+
+  const downloadInvoice = (entry: BillingEntry) => {
+    const number = entry.referenceId || entry.id;
+    const issued = formatDate(entry.createdAt);
+    const amount = entry.estimatedBdt ?? Math.max(0, Math.round((entry.credits / 100) * (topUpRate ?? 0)));
+    const itemLabel =
+      entry.type === "PURCHASE"
+        ? `${entry.credits} credits top-up`
+        : entry.type === "ALLOTMENT"
+          ? `${entry.credits} credits (plan allotment)`
+          : `${entry.credits} credits (${entry.type.toLowerCase()})`;
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Invoice ${number}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; }
+    h1 { margin: 0 0 8px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+    th { background: #f8fafc; }
+  </style>
+</head>
+<body>
+  <h1>Invoice ${number}</h1>
+  <p><strong>Issued:</strong> ${issued}</p>
+  <p><strong>Description:</strong> ${entry.description ?? itemLabel}</p>
+  <table>
+    <thead><tr><th>Item</th><th>Amount</th></tr></thead>
+    <tbody>
+      <tr><td>${itemLabel}</td><td>${formatCurrency(amount)}</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `invoice-${number}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const startPayment = async (payload: { action: PaymentAction; planSlug?: string; credits?: number }) => {
     setProcessingAction(payload.action);
@@ -335,10 +511,10 @@ export default function CreditsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => startPayment({ action: "topup", credits: selectedBundle.credits })}
-                  disabled={processingAction === "topup"}
+                  onClick={() => (effectiveCredits ? startPayment({ action: "topup", credits: effectiveCredits }) : null)}
+                  disabled={processingAction === "topup" || !selectedBundle || effectiveCredits === null}
                   className={`inline-flex items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-wide transition ${
-                    processingAction !== "topup"
+                    processingAction !== "topup" && selectedBundle && effectiveCredits !== null
                       ? "border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/20"
                       : "border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]"
                   }`}
@@ -469,39 +645,53 @@ export default function CreditsPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-3">
-        {bundleOptions.map((bundle) => (
-          <div
-            key={bundle.id}
-            className={`relative overflow-hidden rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft ${
-              bundle.popular ? "border-[#3D64FF]/50 shadow-[0_18px_40px_-24px_rgba(61,100,255,0.4)]" : ""
-            }`}
-          >
-            {bundle.popular ? (
-              <span className="absolute right-4 top-4 rounded-full bg-[#3D64FF]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#3D64FF]">
-                Most popular
-              </span>
-            ) : null}
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-[#181B31]">{bundle.name}</p>
-              <p className="text-3xl font-semibold text-[#181B31]">BDT {bundle.price.toLocaleString()}</p>
-              <p className="text-sm text-[#4B5563]">
-                {bundle.credits} credits · BDT {bundle.perCredit.toFixed(2)} / credit
-              </p>
-              <button
-                type="button"
-                onClick={() => setSelectedBundleCredits(bundle.credits)}
-                className={`mt-2 inline-flex items-center justify-center rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
-                  selectedBundleCredits === bundle.credits
-                    ? "border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary"
-                    : "border-[#DCE0E0] bg-[#FFFFFF] text-[#3D64FF] hover:border-[#3D64FF]/40 hover:bg-[#3D64FF]/10"
-                }`}
-              >
-                {selectedBundleCredits === bundle.credits ? "Selected" : "Select bundle"}
-              </button>
-            </div>
+      <section className="rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Custom top-up</p>
+            <h2 className="text-lg font-semibold text-[#181B31]">Choose how many credits to buy</h2>
+            <p className="text-sm text-[#4B5563]">
+              Pricing is based on your current plan’s top-up rate (BDT {topUpRate ?? "—"} per 100 credits).
+            </p>
           </div>
-        ))}
+          <div className="flex flex-col items-start gap-3 md:items-end">
+            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
+              Credits
+              <input
+                type="number"
+                min={50}
+                step={50}
+                value={effectiveCredits ?? ""}
+                onChange={(e) => {
+                  const parsed = Number(e.target.value);
+                  setCreditsToBuy(Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null);
+                }}
+                className="mt-2 w-32 rounded-xl border border-[#DCE0E0] px-3 py-2 text-sm text-[#181B31] outline-none focus:border-[#3D64FF]"
+              />
+            </label>
+            <div className="text-sm font-semibold text-[#181B31]">
+              {calculatedPrice !== null ? `BDT ${calculatedPrice.toLocaleString()}` : "Select credits"}
+              {effectiveCredits !== null ? (
+                <span className="ml-2 text-xs font-semibold text-[#8A94A6]">
+                  ({effectiveCredits} credits @ BDT {(topUpRate ?? 0) / 100} per credit)
+                </span>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => (effectiveCredits ? startPayment({ action: "topup", credits: effectiveCredits }) : null)}
+              disabled={processingAction === "topup" || effectiveCredits === null || topUpRate === null}
+              className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                processingAction !== "topup" && effectiveCredits !== null && topUpRate !== null
+                  ? "border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/20"
+                  : "border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]"
+              }`}
+            >
+              {processingAction === "topup" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+              Pay with SSLCommerz
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="grid gap-6 rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft lg:grid-cols-[1.2fr_1fr]">
@@ -535,11 +725,101 @@ export default function CreditsPage() {
       <section className="rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Billing history</p>
+            <p className="text-sm text-[#4B5563]">Recent invoices and credit top-ups.</p>
+          </div>
+          {billingLoading ? (
+            <span className="text-xs font-semibold text-[#8A94A6]">Loading…</span>
+          ) : billingError ? (
+            <span className="text-xs font-semibold text-[#D80880]">{billingError}</span>
+          ) : null}
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full divide-y divide-[#E7E9F0] text-sm text-[#181B31]">
+            <thead>
+              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-[#8A94A6]">
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Type</th>
+                <th className="px-3 py-2">Credits</th>
+                <th className="px-3 py-2">Amount (BDT)</th>
+                <th className="px-3 py-2">Reference</th>
+                <th className="px-3 py-2">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E7E9F0]">
+              {!billingLoading && billingHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-center text-xs font-semibold text-[#8A94A6]">
+                    No billing records yet.
+                  </td>
+                </tr>
+              ) : (
+                pagedBilling.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-[#F8F9FE]">
+                    <td className="px-3 py-3">{formatDate(entry.createdAt)}</td>
+                    <td className="px-3 py-3 font-semibold">
+                      {entry.type === "PURCHASE"
+                        ? "Top-up"
+                        : entry.type === "ALLOTMENT"
+                          ? "Plan credit"
+                          : entry.type === "USAGE"
+                            ? "Usage"
+                            : entry.type === "REFUND"
+                              ? "Refund"
+                              : "Adjustment"}
+                    </td>
+                    <td className="px-3 py-3">{entry.credits.toLocaleString()} credits</td>
+                    <td className="px-3 py-3">
+                      {entry.estimatedBdt !== null ? `BDT ${entry.estimatedBdt.toLocaleString()}` : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-[#4B5563]">
+                      {entry.referenceId || entry.description || "—"}
+                    </td>
+                    <td className="px-3 py-3 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => openInvoicePreview(entry)}
+                        className="rounded-full border border-[#DCE0E0] px-3 py-1 font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:bg-[#3D64FF]/10"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {billingHistory.length > billingPageSize ? (
+          <div className="mt-4">
+            <Pagination
+              page={billingPage}
+              totalItems={billingHistory.length}
+              pageSize={billingPageSize}
+              onPageChange={setBillingPage}
+            />
+          </div>
+        ) : null}
+      </section>
+
+      {selectedInvoice ? (
+        <InvoiceModal
+          entry={selectedInvoice}
+          topUpRate={topUpRate}
+          onClose={closeInvoicePreview}
+          onDownload={downloadInvoice}
+        />
+      ) : null}
+
+      <section className="rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">Checkout</p>
             <p className="text-sm text-[#4B5563]">
-              {selectedBundle
-                ? `Bundle: ${selectedBundle.name} — ${selectedBundle.credits} credits`
-                : "Select a bundle"}
+              {effectiveCredits !== null
+                ? `Top-up: ${effectiveCredits} credits @ BDT ${(topUpRate ?? 0) / 100} per credit`
+                : "Select credits to continue"}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -548,10 +828,10 @@ export default function CreditsPage() {
             ) : null}
             <button
               type="button"
-              onClick={() => startPayment({ action: "topup", credits: selectedBundle.credits })}
-              disabled={!selectedBundle || processingAction === "topup"}
+              onClick={() => (effectiveCredits ? startPayment({ action: "topup", credits: effectiveCredits }) : null)}
+              disabled={processingAction === "topup" || effectiveCredits === null || topUpRate === null}
               className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
-                selectedBundle && processingAction !== "topup"
+                effectiveCredits !== null && topUpRate !== null && processingAction !== "topup"
                   ? "border-[#3D64FF]/60 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/20"
                   : "border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]"
               }`}

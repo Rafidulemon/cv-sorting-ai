@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { BillingCycle, CreditLedgerType, PlanTier, SubscriptionStatus } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 import { pricingPlans } from "@/app/data/pricing";
+import { sendEmail } from "@/app/lib/mailer";
+import { buildPaymentReceiptEmail } from "@/app/lib/emailTemplates";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +186,10 @@ async function handleCallback(fields: Record<string, string>, request: NextReque
       planSlug: true,
       creditsBalance: true,
       resumeAllotment: true,
+      name: true,
+      billingEmail: true,
+      companyEmail: true,
+      owner: { select: { email: true, name: true } },
     },
   });
 
@@ -224,6 +230,11 @@ async function handleCallback(fields: Record<string, string>, request: NextReque
 
   const renewsOn = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   const metrics = buildPlanMetrics(planDetails, effectivePlanSlug);
+  const billingContact =
+    organization.billingEmail ?? organization.companyEmail ?? organization.owner?.email ?? "billing@carrix.ai";
+  const companyName = organization.name ?? "Your workspace";
+  const invoiceNumber = transactionId;
+  const issuedAt = new Date();
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -272,6 +283,16 @@ async function handleCallback(fields: Record<string, string>, request: NextReque
             startsOn: new Date(),
           },
         });
+        await tx.creditLedger.create({
+          data: {
+            organizationId: organization.id,
+            amount: metrics.creditsBalance,
+            type: CreditLedgerType.ALLOTMENT,
+            referenceType: "SSLCommerz",
+            referenceId: transactionId,
+            description: `Plan change (${effectivePlanSlug})`,
+          },
+        });
         return;
       }
 
@@ -288,11 +309,37 @@ async function handleCallback(fields: Record<string, string>, request: NextReque
           externalCustomerId: validationId,
         },
       });
+
+      await tx.creditLedger.create({
+        data: {
+          organizationId: organization.id,
+          amount: metrics.creditsBalance,
+          type: CreditLedgerType.ALLOTMENT,
+          referenceType: "SSLCommerz",
+          referenceId: transactionId,
+          description: `Invoice payment (${effectivePlanSlug})`,
+        },
+      });
     });
   } catch (error) {
     console.error("[sslcommerz/billing/callback] Update failed", error);
     const redirectUrl = buildRedirect(request, "error", action);
     return NextResponse.redirect(redirectUrl, { status: 303 });
+  }
+
+  try {
+    const receipt = buildPaymentReceiptEmail({
+      companyName,
+      planName: (planDetails as any)?.name ?? effectivePlanSlug,
+      amountBdt: expectedAmount,
+      credits: action === "topup" ? credits : metrics.creditsBalance,
+      invoiceNumber,
+      billingEmail: billingContact,
+      issuedAt,
+    });
+    await sendEmail({ to: billingContact, ...receipt });
+  } catch (error) {
+    console.error("[sslcommerz/billing/callback] Failed to send receipt", error);
   }
 
   const redirectUrl = buildRedirect(request, "success", action);
