@@ -20,7 +20,6 @@ type UploadPurpose = "job-description" | "company-logo" | "profile-avatar";
 const allowedMimeByPurpose: Record<UploadPurpose, Set<string>> = {
   "job-description": new Set([
     "application/pdf",
-    "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
   ]),

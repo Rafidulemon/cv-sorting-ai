@@ -4,27 +4,60 @@ import { fallbackCurrencyOptions, fallbackEmploymentTypeOptions, fallbackExperie
 
 export const dynamic = "force-dynamic";
 
+function dedupe(values: Array<string | null | undefined>) {
+  const unique = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed || unique.has(trimmed)) continue;
+    unique.add(trimmed);
+    result.push(trimmed);
+  }
+
+  return result;
+}
+
 export async function GET() {
   try {
-    const options = await prisma.jobOption.findMany({
-      orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { value: "asc" }],
-    });
+    const [seniorityRows, employmentRows, currencyRows] = await Promise.all([
+      prisma.job.findMany({
+        where: { seniority: { not: null } },
+        select: { seniority: true },
+        distinct: ["seniority"],
+        orderBy: { seniority: "asc" },
+      }),
+      prisma.job.findMany({
+        where: { employmentType: { not: null } },
+        select: { employmentType: true },
+        distinct: ["employmentType"],
+        orderBy: { employmentType: "asc" },
+      }),
+      prisma.job.findMany({
+        where: { currency: { not: null } },
+        select: { currency: true },
+        distinct: ["currency"],
+        orderBy: { currency: "asc" },
+      }),
+    ]);
 
-    const experienceLevels = options
-      .filter((item) => item.category === "EXPERIENCE_LEVEL")
-      .map((item) => item.value);
-    const employmentTypes = options
-      .filter((item) => item.category === "EMPLOYMENT_TYPE")
-      .map((item) => item.value);
-    const currencies = options.filter((item) => item.category === "CURRENCY").map((item) => item.value);
+    const experienceLevels = dedupe([
+      ...seniorityRows.map((job) => job.seniority),
+      ...fallbackExperienceOptions,
+    ]);
+    const employmentTypes = dedupe([
+      ...employmentRows.map((job) => job.employmentType),
+      ...fallbackEmploymentTypeOptions,
+    ]);
+    const currencies = dedupe([...currencyRows.map((job) => job.currency), ...fallbackCurrencyOptions]);
 
     return NextResponse.json({
-      experienceLevels: experienceLevels.length ? experienceLevels : fallbackExperienceOptions,
-      employmentTypes: employmentTypes.length ? employmentTypes : fallbackEmploymentTypeOptions,
-      currencies: currencies.length ? currencies : fallbackCurrencyOptions,
+      experienceLevels,
+      employmentTypes,
+      currencies,
     });
   } catch (error) {
-    console.error("[jobs/options] Failed to load options", error);
+    console.error("[jobs/options] Failed to load options from Job table", error);
     return NextResponse.json(
       {
         experienceLevels: fallbackExperienceOptions,

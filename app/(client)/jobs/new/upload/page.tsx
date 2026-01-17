@@ -12,10 +12,9 @@ import {
   Sparkles,
   UploadCloud,
 } from "lucide-react";
-import type { JobSummary } from "../../data";
+import type { ApiJob, JobSummary } from "../../data";
+import { mapJobToSummary } from "../../data";
 import { useJobCreation } from "@/app/components/job/JobCreationProvider";
-import { jobs, jobDetails } from "../../data";
-import { useSession } from "next-auth/react";
 
 type SelectedJob = {
   id: string | null;
@@ -25,22 +24,9 @@ type SelectedJob = {
   updated?: string;
 };
 
-type ApiJob = {
-  id: string;
-  title: string;
-  status?: string | null;
-  createdBy?: {
-    id: string;
-    name?: string | null;
-    email?: string | null;
-  } | null;
-  updatedAt?: string | null;
-};
-
 export default function UploadCandidatesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
   const {
     goToRoleDetailsStep,
     uploadedFiles,
@@ -67,12 +53,8 @@ export default function UploadCandidatesPage() {
 
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? "");
   const [apiJobs, setApiJobs] = useState<Record<string, ApiJob>>({});
-  const [isLoadingApiJobs, setIsLoadingApiJobs] = useState(false);
-  const currentUserName = session?.user?.name?.trim() || "You";
-
-  useEffect(() => {
-    setSelectedJobId(jobId ?? "");
-  }, [jobId]);
+  const [jobOptions, setJobOptions] = useState<JobSummary[]>([]);
+  const effectiveSelectedId = selectedJobId || jobId || "";
 
   useEffect(() => {
     const sectionParam = searchParams.get("section");
@@ -83,7 +65,6 @@ export default function UploadCandidatesPage() {
 
   useEffect(() => {
     const fetchJobs = async () => {
-      setIsLoadingApiJobs(true);
       try {
         const response = await fetch("/api/jobs");
         if (!response.ok) return;
@@ -91,6 +72,7 @@ export default function UploadCandidatesPage() {
         const fetched = Array.isArray(payload?.jobs)
           ? (payload.jobs as ApiJob[])
           : [];
+        setJobOptions(fetched.map(mapJobToSummary));
         setApiJobs(
           fetched.reduce<Record<string, ApiJob>>((acc, job) => {
             if (job.id) acc[job.id] = job;
@@ -99,8 +81,6 @@ export default function UploadCandidatesPage() {
         );
       } catch {
         // ignore network errors for this ancillary load
-      } finally {
-        setIsLoadingApiJobs(false);
       }
     };
 
@@ -108,23 +88,21 @@ export default function UploadCandidatesPage() {
   }, []);
 
   const selectedJob = useMemo<SelectedJob | null>(() => {
-    const apiJob = selectedJobId ? apiJobs[selectedJobId] : null;
-    const apiOwner =
-      apiJob?.createdBy?.name || apiJob?.createdBy?.email || undefined;
+    const apiJob = effectiveSelectedId ? apiJobs[effectiveSelectedId] : null;
+    const apiOwner = apiJob?.createdBy?.name || apiJob?.createdBy?.email || undefined;
+    const found = effectiveSelectedId ? jobOptions.find((job) => job.id === effectiveSelectedId) : null;
 
-    if (selectedJobId) {
-      const known =
-        jobDetails[selectedJobId] ??
-        jobs.find((job) => job.id === selectedJobId);
-      if (known) {
-        return {
-          id: known.id,
-          title: known.title,
-          status: known.status,
-          owner: apiOwner ?? known.owner ?? undefined,
-          updated: apiJob?.updatedAt ?? known.updated,
-        };
-      }
+    if (effectiveSelectedId) {
+      const updated =
+        found?.updated ??
+        (apiJob?.updatedAt ? new Date(apiJob.updatedAt).toLocaleString() : undefined);
+      return {
+        id: found?.id ?? effectiveSelectedId,
+        title: found?.title ?? apiJob?.title ?? 'Untitled role',
+        status: found?.status,
+        owner: apiOwner ?? found?.owner ?? undefined,
+        updated,
+      };
     }
 
     if (jobId || aiForm.title.trim()) {
@@ -138,12 +116,12 @@ export default function UploadCandidatesPage() {
     }
 
     return null;
-  }, [aiForm.title, apiJobs, jobId, selectedJobId]);
+  }, [aiForm.title, apiJobs, effectiveSelectedId, jobId, jobOptions]);
 
   const handleSelectJob = (nextId: string) => {
     setSelectedJobId(nextId);
     if (nextId) {
-      const found = jobDetails[nextId] ?? jobs.find((job) => job.id === nextId);
+      const found = jobOptions.find((job) => job.id === nextId);
       setJobId(nextId);
       if (found?.title) {
         setAiForm((prev) => ({ ...prev, title: found.title }));
@@ -282,12 +260,12 @@ export default function UploadCandidatesPage() {
                 Recent jobs
               </label>
               <select
-                value={selectedJobId}
+                value={effectiveSelectedId}
                 onChange={(event) => handleSelectJob(event.target.value)}
                 className="w-full rounded-2xl border border-[#DCE0E0] bg-[#F7F9FC] px-4 py-3 text-sm text-[#181B31] focus:border-[#3D64FF]/60 focus:outline-none"
               >
                 <option value="">Select a job</option>
-                {jobs.map((job) => (
+                {jobOptions.map((job) => (
                   <option key={job.id} value={job.id}>
                     {job.title} — {job.status}
                   </option>

@@ -199,7 +199,7 @@ export async function GET(request: NextRequest) {
       select: jobSelect,
     });
 
-    return NextResponse.json({ jobs });
+    return NextResponse.json({ jobs, viewerId: context.userId });
   } catch (error) {
     console.error("[jobs] Failed to load jobs", error);
     const message = error instanceof Error ? error.message : "Failed to load jobs";

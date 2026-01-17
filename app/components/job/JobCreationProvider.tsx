@@ -40,8 +40,6 @@ export const jobCreationSteps = [
   { id: 2, key: 'upload' as const, title: 'Upload candidates', description: 'Add CVs and fine tune how many to shortlist.' },
 ];
 
-type Toast = { message: string; type: 'success' | 'error' } | null;
-
 type JobCreationContextValue = ReturnType<typeof useJobCreationState>;
 
 const JobCreationContext = createContext<JobCreationContextValue | null>(null);
@@ -147,8 +145,9 @@ function useJobCreationState() {
 
   const isUploadingJd = jdUploadState === 'uploading';
 
-  const showToast = (_message: string, _type: 'success' | 'error') => {
-    return;
+  const showToast = (message: string, type: 'success' | 'error') => {
+    void message;
+    void type;
   };
 
   useEffect(() => {
@@ -356,6 +355,16 @@ function useJobCreationState() {
 
     try {
       const jobTitle = aiForm.title.trim();
+      const allowedExtensions = new Set(['pdf', 'docx', 'txt']);
+      const allowedMimeTypes = new Set([
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain',
+      ]);
+      const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : '';
+      if (!allowedExtensions.has(extension ?? '') && !allowedMimeTypes.has(file.type)) {
+        throw new Error('Only PDF, DOCX, or TXT files are supported.');
+      }
 
       if (file.size > JOB_DESCRIPTION_MAX_BYTES) {
         throw new Error('Job description must be 5MB or smaller.');
@@ -425,11 +434,13 @@ function useJobCreationState() {
 
   const processJobDescription = async (
     textOverride?: string,
-    jobIdOverride?: string | null
+    jobIdOverride?: string | null,
+    fileOverride?: File | null
   ): Promise<{ success: boolean; error?: string }> => {
     if (jdProcessing) return { success: false, error: 'Processing is already running.' };
-    const jdText = (textOverride ?? jdTextForProcessing).trim();
-    if (!jdText.length) {
+    const jdText = (textOverride ?? jdTextForProcessing) || '';
+    const fileToProcess = fileOverride ?? null;
+    if (!jdText.trim().length && !fileToProcess) {
       const message = 'Upload or paste a job description before processing.';
       setJdProcessingError(message);
       return { success: false, error: message };
@@ -445,17 +456,39 @@ function useJobCreationState() {
     setJdProcessingProgress(15);
 
     try {
-      const response = await fetch('/api/jobs/process-jd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobId: targetJobId,
-          text: jdText,
-          source: uploadedJdText.trim() ? 'paste' : 'upload',
-          fileName: uploadedJdFileName ?? undefined,
-          uploadedDescriptionFile: uploadedJdFileKey ?? uploadedJdFileUrl ?? uploadedJdFileName ?? undefined,
-        }),
-      });
+      const source = uploadedJdText.trim() ? 'paste' : 'upload';
+      let response: Response;
+
+      if (fileToProcess) {
+        const formData = new FormData();
+        formData.append('source', source);
+        formData.append('file', fileToProcess);
+        formData.append('fileName', fileToProcess.name);
+        if (targetJobId) {
+          formData.append('jobId', targetJobId);
+        }
+        const uploadedReference = uploadedJdFileKey ?? uploadedJdFileUrl ?? uploadedJdFileName;
+        if (uploadedReference) {
+          formData.append('uploadedDescriptionFile', uploadedReference);
+        }
+
+        response = await fetch('/api/jobs/process-jd', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        response = await fetch('/api/jobs/process-jd', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jobId: targetJobId,
+            text: jdText.trim(),
+            source,
+            fileName: uploadedJdFileName ?? undefined,
+            uploadedDescriptionFile: uploadedJdFileKey ?? uploadedJdFileUrl ?? uploadedJdFileName ?? undefined,
+          }),
+        });
+      }
 
       setJdProcessingProgress(55);
 
@@ -473,6 +506,8 @@ function useJobCreationState() {
         responsibilities?: string[];
         skills?: string[];
         seniority?: string;
+        employmentType?: string | null;
+        category?: string | null;
       };
       const jobPayload = payload?.job as { id?: string; description?: string } | undefined;
 
@@ -493,6 +528,9 @@ function useJobCreationState() {
       }
       if (structured.seniority?.trim()) {
         setAiForm((prev) => ({ ...prev, experienceLevel: structured.seniority?.trim() || prev.experienceLevel }));
+      }
+      if (structured.employmentType?.trim()) {
+        setEmploymentType(structured.employmentType.trim());
       }
       if (structured.summary?.trim()) {
         const cleanSummary = structured.summary.trim();

@@ -3,6 +3,9 @@ import { getToken } from "next-auth/jwt";
 import { EmploymentType, Prisma } from "@prisma/client";
 import OpenAI from "openai";
 import { z } from "zod";
+import { PDFParse } from "pdf-parse";
+import JSZip from "jszip";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import prisma from "@/app/lib/prisma";
 
 export const runtime = "nodejs";
@@ -18,6 +21,17 @@ const DEFAULT_MODEL = process.env.OPENAI_JD_MODEL ?? "gpt-4o-mini";
 const INPUT_COST_PER_1K = Number(process.env.OPENAI_INPUT_RATE_PER_1K ?? "0.00015");
 const OUTPUT_COST_PER_1K = Number(process.env.OPENAI_OUTPUT_RATE_PER_1K ?? "0.0006");
 const NULL_CHAR_PATTERN = /\u0000/g;
+const SUPPORTED_FILE_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+]);
+const SUPPORTED_EXTENSIONS = new Set(["pdf", "docx", "txt"]);
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const pdfWorkerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+PDFParse.setWorker(pdfWorkerSrc);
 
 const requestSchema = z.object({
   jobId: z.string().trim().optional(),
@@ -61,6 +75,72 @@ function normalizeList(values?: string[]) {
 function stripNullCharacters(value: string) {
   // Postgres rejects strings containing the null character; remove them proactively.
   return value.replace(NULL_CHAR_PATTERN, "");
+}
+
+function decodeXmlEntities(value: string) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
+async function extractTextFromPdf(buffer: Buffer) {
+  const parser = new PDFParse({ data: buffer });
+  const parsed = await parser.getText();
+  await parser.destroy();
+  return parsed.text ?? "";
+}
+
+async function extractTextFromDocx(buffer: Buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const documentFile = zip.file("word/document.xml");
+  if (!documentFile) {
+    throw new Error("DOCX is missing document content.");
+  }
+  const xml = await documentFile.async("text");
+  const matches = Array.from(xml.matchAll(/<w:t[^>]*>(.*?)<\/w:t>/g)).map((match) =>
+    decodeXmlEntities(match[1] ?? "").trim(),
+  );
+  return matches.join(" ").trim();
+}
+
+function extractTextFromTxt(buffer: Buffer) {
+  return buffer.toString("utf-8");
+}
+
+function detectFileKind(file: File): "pdf" | "docx" | "txt" | null {
+  const extension = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() ?? "" : "";
+  const mime = (file.type || "").toLowerCase();
+
+  if (SUPPORTED_EXTENSIONS.has(extension)) {
+    return extension === "txt" ? "txt" : (extension as "pdf" | "docx");
+  }
+
+  if (SUPPORTED_FILE_TYPES.has(mime)) {
+    if (mime === "application/pdf") return "pdf";
+    if (mime === "text/plain") return "txt";
+    return "docx";
+  }
+
+  return null;
+}
+
+async function extractTextFromFile(file: File) {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("Job description must be 5MB or smaller.");
+  }
+
+  const kind = detectFileKind(file);
+  if (!kind) {
+    throw new Error("Unsupported file type. Use PDF, DOCX, or TXT.");
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  if (kind === "pdf") return extractTextFromPdf(buffer);
+  if (kind === "docx") return extractTextFromDocx(buffer);
+  return extractTextFromTxt(buffer);
 }
 
 function convertTextToPreviewHtml(text: string) {
@@ -163,6 +243,7 @@ type StructuredJd = {
   skills?: string[];
   seniority?: string;
   employmentType?: string;
+  category?: string;
 };
 
 async function parseWithOpenAi(text: string) {
@@ -182,7 +263,7 @@ async function parseWithOpenAi(text: string) {
       {
         role: "system",
         content:
-          "Extract structured fields from the job description. Respond ONLY with JSON matching the schema: {\"title\": string, \"summary\": string, \"description\": string, \"responsibilities\": string[], \"skills\": string[], \"seniority\": string, \"employmentType\": string}. Keep strings concise and plain text.",
+          "Extract structured fields from the job description. Respond ONLY with JSON matching the schema: {\"title\": string, \"summary\": string, \"description\": string, \"responsibilities\": string[], \"skills\": string[], \"seniority\": string, \"employmentType\": string, \"category\": string}. Keep strings concise and plain text.",
       },
       { role: "user", content: `Job description:\n${text}` },
     ],
@@ -227,6 +308,7 @@ function buildRequirements(options: {
   uploadedDescriptionFile?: string | null;
   summary?: string | null;
   rawTextSample?: string;
+  category?: string | null;
 }) {
   const base =
     options.existing && typeof options.existing === "object" && !Array.isArray(options.existing)
@@ -243,6 +325,9 @@ function buildRequirements(options: {
   if (options.rawTextSample) {
     base.rawTextSample = options.rawTextSample;
   }
+  if (options.category?.trim()) {
+    base.category = options.category.trim();
+  }
   base.parsedWith = "openai";
   base.parsedAt = new Date().toISOString();
 
@@ -256,40 +341,85 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let payload: unknown;
-    try {
-      payload = await request.json();
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    const contentType = request.headers.get("content-type") ?? "";
+    let text: string | null = null;
+    let source: "upload" | "paste" = "upload";
+    let jobId: string | null = null;
+    let fileName: string | null = null;
+    let uploadedDescriptionFile: string | null = null;
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      const file = formData.get("file");
+      if (!(file instanceof File)) {
+        return NextResponse.json({ error: "A PDF, DOCX, or TXT file is required." }, { status: 400 });
+      }
+
+      const extracted = stripNullCharacters((await extractTextFromFile(file)).trim());
+      if (extracted.length < 30) {
+        return NextResponse.json(
+          { error: "Job description text is too short to process." },
+          { status: 400 },
+        );
+      }
+
+      text = extracted.slice(0, 12000);
+      const jobIdValue = formData.get("jobId");
+      jobId = typeof jobIdValue === "string" && jobIdValue.trim().length ? jobIdValue.trim() : null;
+      const fileNameValue = formData.get("fileName");
+      fileName =
+        typeof fileNameValue === "string"
+          ? stripNullCharacters(fileNameValue)
+          : stripNullCharacters(file.name);
+      const uploadedFileValue = formData.get("uploadedDescriptionFile");
+      uploadedDescriptionFile =
+        typeof uploadedFileValue === "string"
+          ? stripNullCharacters(uploadedFileValue)
+          : stripNullCharacters(file.name);
+      const sourceValue = formData.get("source");
+      source = sourceValue === "paste" ? "paste" : "upload";
+    } else {
+      let payload: unknown;
+      try {
+        payload = await request.json();
+      } catch {
+        return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+      }
+
+      const parsed = requestSchema.safeParse(payload);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: "Invalid payload", details: parsed.error.flatten() },
+          { status: 400 },
+        );
+      }
+
+      const sanitizedText = stripNullCharacters(parsed.data.text);
+      const trimmed = sanitizedText.trim();
+      text = trimmed.slice(0, 12000);
+      jobId = parsed.data.jobId?.trim() || null;
+      fileName = parsed.data.fileName ? stripNullCharacters(parsed.data.fileName) : parsed.data.fileName ?? null;
+      uploadedDescriptionFile = parsed.data.uploadedDescriptionFile
+        ? stripNullCharacters(parsed.data.uploadedDescriptionFile)
+        : parsed.data.uploadedDescriptionFile ?? null;
+      source = parsed.data.source;
     }
 
-    const parsed = requestSchema.safeParse(payload);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid payload", details: parsed.error.flatten() },
-        { status: 400 },
-      );
+    if (!text || !text.trim().length) {
+      return NextResponse.json({ error: "Job description text is required" }, { status: 400 });
     }
 
-    const sanitizedText = stripNullCharacters(parsed.data.text);
-    const safeFileName = parsed.data.fileName
-      ? stripNullCharacters(parsed.data.fileName)
-      : parsed.data.fileName;
-    const uploadedDescriptionFile = parsed.data.uploadedDescriptionFile
-      ? stripNullCharacters(parsed.data.uploadedDescriptionFile)
-      : parsed.data.uploadedDescriptionFile;
+    const clippedText = text.trim();
+    const safeFileName = fileName;
 
-    const trimmed = sanitizedText.trim();
-    const clippedText = trimmed.slice(0, 12000);
-
-    const existingJob = parsed.data.jobId
+    const existingJob = jobId
       ? await prisma.job.findFirst({
-          where: { id: parsed.data.jobId, organizationId: context.organizationId },
+          where: { id: jobId, organizationId: context.organizationId },
           select: { id: true, requirements: true },
         })
       : null;
 
-    if (parsed.data.jobId && !existingJob) {
+    if (jobId && !existingJob) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
@@ -300,6 +430,7 @@ export async function POST(request: NextRequest) {
       stripNullCharacters(structured.employmentType ?? "").trim() || undefined,
     );
     const seniority = stripNullCharacters(structured.seniority ?? "").trim() || undefined;
+    const category = stripNullCharacters(structured.category ?? "").trim() || undefined;
     const title =
       stripNullCharacters(structured.title?.trim() ?? "") || deriveTitle(clippedText, safeFileName);
     const summary =
@@ -323,10 +454,11 @@ export async function POST(request: NextRequest) {
       existing: existingJob?.requirements ?? null,
       responsibilities,
       skills,
-      source: parsed.data.source,
+      source,
       uploadedDescriptionFile,
       summary,
       rawTextSample: clippedText.slice(0, 2000),
+      category: category ?? null,
     });
 
     const job = existingJob
@@ -369,6 +501,7 @@ export async function POST(request: NextRequest) {
         skills,
         seniority: seniority ?? null,
         employmentType: employmentType ?? null,
+        category: category ?? null,
       },
     });
   } catch (error) {

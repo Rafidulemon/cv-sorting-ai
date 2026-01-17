@@ -16,7 +16,11 @@ type UploadDescriptionProps = {
   canProcessJd: boolean;
   onJdTextChange: (value: string) => void;
   onUploadSelectedFile: (file: File) => Promise<{ success: boolean; error?: string; text?: string; jobId?: string | null }>;
-  onProcessJd: (textOverride?: string, jobIdOverride?: string | null) => Promise<{ success: boolean; error?: string }>;
+  onProcessJd: (
+    textOverride?: string,
+    jobIdOverride?: string | null,
+    file?: File | null
+  ) => Promise<{ success: boolean; error?: string }>;
 };
 
 export default function UploadDescription({
@@ -28,7 +32,7 @@ export default function UploadDescription({
   jdProcessing,
   jdProcessingProgress,
   jdProcessingError,
-  canProcessJd: _canProcessJd,
+  canProcessJd,
   onJdTextChange,
   onUploadSelectedFile,
   onProcessJd,
@@ -90,6 +94,7 @@ export default function UploadDescription({
     setFlowProgress(0);
     let textToProcess = hasPastedText ? uploadedJdText : '';
     let jobIdOverride: string | null | undefined;
+    const fileToProcess = selectedFile;
 
     try {
       if (selectedFile) {
@@ -110,7 +115,7 @@ export default function UploadDescription({
 
       setFlowStatus('processing');
       setFlowProgress((prev) => Math.max(prev, 65));
-      const processResult = await onProcessJd(textToProcess || undefined, jobIdOverride);
+      const processResult = await onProcessJd(textToProcess || undefined, jobIdOverride, fileToProcess);
       if (!processResult.success) {
         throw new Error(processResult.error || jdProcessingError || 'Failed to process job description.');
       }
@@ -131,7 +136,7 @@ export default function UploadDescription({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-[#181B31]">Upload a file</p>
-                <p className="text-xs text-[#8A94A6]">PDF, DOCX, DOC, or TXT up to 5MB.</p>
+                <p className="text-xs text-[#8A94A6]">PDF, DOCX, or TXT up to 5MB.</p>
               </div>
               {hasUploadedFile && (
                 <span className="rounded-full bg-[#E7F3EF] px-3 py-1 text-[11px] font-semibold text-[#1B806A]">Uploaded</span>
@@ -151,7 +156,7 @@ export default function UploadDescription({
               </div>
             <input
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,.docx,.txt"
               className="hidden"
               onChange={handleFileSelect}
               disabled={fileInputsDisabled}
@@ -230,9 +235,15 @@ export default function UploadDescription({
             <button
               type="button"
               onClick={handleUploadAndProcess}
-              disabled={!hasDescriptionSource || isFlowRunning || isBusy || lockAfterUpload}
+              disabled={
+                !hasDescriptionSource ||
+                isFlowRunning ||
+                isBusy ||
+                lockAfterUpload ||
+                (!canProcessJd && !selectedFile)
+              }
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
-                !hasDescriptionSource || isFlowRunning || isBusy || lockAfterUpload
+                !hasDescriptionSource || isFlowRunning || isBusy || lockAfterUpload || (!canProcessJd && !selectedFile)
                   ? 'cursor-not-allowed border border-[#DCE0E0] bg-[#F5F7FB] text-[#8A94A6]'
                   : 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'
               }`}

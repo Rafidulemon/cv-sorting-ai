@@ -1,69 +1,29 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Clock, Sparkles, Timer, TrendingUp } from "lucide-react";
+import type { ApiJob, JobSummary } from "../jobs/data";
+import { mapJobToSummary } from "../jobs/data";
 
-const statCards = [
-  {
-    label: "Active jobs",
-    value: "3",
-    helper: "Running screenings",
-    gradient: "from-[#ffe2f1] via-[#fff5fb] to-white",
-  },
-  {
-    label: "Candidates",
-    value: "186",
-    helper: "Uploaded this month",
-    gradient: "from-[#e9e8ff] via-[#f3f2ff] to-white",
-  },
-  {
-    label: "Shortlisted",
-    value: "24",
-    helper: "Top matches surfaced",
-    gradient: "from-[#f3e4ff] via-[#f9f2ff] to-white",
-  },
-  {
-    label: "Avg. time saved",
-    value: "58%",
-    helper: "Vs manual screening",
-    gradient: "from-[#e2f5ff] via-[#f0faff] to-white",
-  },
-];
+type Candidate = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
+  headline: string | null;
+  source: string | null;
+  createdAt: string;
+  tags: string[];
+};
 
-const recentJobs = [
-  { title: "Frontend Developer", resumes: 68, status: "Active", tone: "from-[#34d399] to-[#16a34a]" },
-  { title: "Sales Executive", resumes: 41, status: "Paused", tone: "from-[#f9a8d4] to-[#ec4899]" },
-  { title: "Data Analyst", resumes: 77, status: "Completed", tone: "from-[#a5b4fc] to-[#6366f1]" },
-];
-
-const candidates = [
-  {
-    name: "Ayesha Rahman",
-    match: 91,
-    signals: "Frontend, TS, UI",
-    stage: "Shortlisted",
-    tone: "from-[#22c55e] to-[#16a34a]",
-  },
-  {
-    name: "Rohan Mehta",
-    match: 87,
-    signals: "React, Design, CSS",
-    stage: "Review",
-    tone: "from-[#fb923c] to-[#f97316]",
-  },
-  {
-    name: "Nabila Khan",
-    match: 78,
-    signals: "Next, Node, SQL",
-    stage: "Review",
-    tone: "from-[#f472b6] to-[#db2777]",
-  },
-  {
-    name: "Aminul Islam",
-    match: 66,
-    signals: "Jest, RTL, CI",
-    stage: "Hold",
-    tone: "from-[#a5b4fc] to-[#6366f1]",
-  },
-];
+const statusTone: Record<string, string> = {
+  Active: "from-[#34d399] to-[#16a34a]",
+  Reviewing: "from-[#fcd34d] to-[#f59e0b]",
+  Draft: "from-[#f9a8d4] to-[#ec4899]",
+  Completed: "from-[#a5b4fc] to-[#6366f1]",
+};
 
 const timeSavingsData = [
   { label: "Mon", minutes: 42 },
@@ -85,8 +45,68 @@ const successRateData = [
 const maxTimeSaved = Math.max(...timeSavingsData.map((item) => item.minutes));
 
 export default function DashboardPage() {
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [recentJobs, setRecentJobs] = useState<JobSummary[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const [jobsRes, candidatesRes] = await Promise.all([
+          fetch("/api/jobs", { cache: "no-store" }),
+          fetch("/api/candidates", { cache: "no-store" }),
+        ]);
+
+        const jobsPayload = await jobsRes.json();
+        const candidatePayload = await candidatesRes.json();
+
+        if (!jobsRes.ok) throw new Error(jobsPayload?.error ?? "Failed to load jobs");
+        if (!candidatesRes.ok) throw new Error(candidatePayload?.error ?? "Failed to load candidates");
+
+        const apiJobs = Array.isArray(jobsPayload?.jobs) ? (jobsPayload.jobs as ApiJob[]) : [];
+        const mappedJobs = apiJobs.map(mapJobToSummary);
+        setJobs(mappedJobs);
+        setRecentJobs(mappedJobs.slice(0, 3));
+
+        const apiCandidates = Array.isArray(candidatePayload?.candidates)
+          ? (candidatePayload.candidates as Candidate[])
+          : [];
+        setCandidates(apiCandidates);
+      } catch (err) {
+        setError((err as Error)?.message ?? "Unable to load dashboard");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, []);
+
+  const statCards = useMemo(() => {
+    const active = jobs.filter((job) => job.status === "Active").length;
+    const totalCandidates = candidates.length;
+    const shortlisted = jobs.reduce((sum, job) => sum + (job.shortlist ?? 0), 0);
+    return [
+      { label: "Active jobs", value: String(active), helper: "Running screenings", gradient: "from-[#ffe2f1] via-[#fff5fb] to-white" },
+      { label: "Candidates", value: String(totalCandidates || 0), helper: "In your pipeline", gradient: "from-[#e9e8ff] via-[#f3f2ff] to-white" },
+      { label: "Shortlisted", value: String(shortlisted || 0), helper: "Top matches surfaced", gradient: "from-[#f3e4ff] via-[#f9f2ff] to-white" },
+      { label: "Avg. time saved", value: "58%", helper: "Vs manual screening", gradient: "from-[#e2f5ff] via-[#f0faff] to-white" },
+    ];
+  }, [jobs, candidates]);
+
+  const candidateList = candidates.slice(0, 5);
+
   return (
     <div className="space-y-6 text-[#1f2a44]">
+      {error && (
+        <div className="rounded-3xl border border-[#F59E0B] bg-[#FFF7E6] px-4 py-3 text-sm text-[#92400E] shadow-sm">
+          {error}
+        </div>
+      )}
       <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-white/80 p-6 shadow-card-soft backdrop-blur sm:p-8">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute right-10 top-6 h-32 w-32 rounded-full bg-[#f7e2f3] blur-3xl" />
@@ -190,16 +210,19 @@ export default function DashboardPage() {
               <h2 className="text-xl font-semibold text-[#1f2a44]">Recent Screening Jobs</h2>
               <p className="text-sm text-[#8a90a6]">Latest uploads and status.</p>
             </div>
-            <Link href="/history" className="text-sm font-semibold text-primary-500 transition hover:text-primary-600">
-              View all
+            <Link href="/jobs" className="text-sm font-semibold text-primary-500 transition hover:text-primary-600">
+              See all
             </Link>
           </div>
 
           <div className="space-y-3">
+            {loading && <p className="text-sm text-[#8a90a6]">Loading jobs...</p>}
+            {!loading && !recentJobs.length && <p className="text-sm text-[#8a90a6]">No jobs available yet.</p>}
             {recentJobs.map((job) => (
-              <div
-                key={job.title}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm"
+              <Link
+                key={job.id}
+                href={`/jobs/${job.id}`}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/90 p-4 text-[#1f2a44] shadow-sm transition hover:border-primary-100 hover:shadow-md"
               >
                 <div className="flex items-center gap-3">
                   <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-[#f6f0ff] to-[#fdf2f8] text-[#1f2a44]">
@@ -207,20 +230,22 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-base font-semibold text-[#1f2a44]">{job.title}</p>
-                    <p className="text-sm text-[#8a90a6]">{job.resumes} resumes</p>
+                    <p className="text-sm text-[#8a90a6]">Shortlist {job.shortlist}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div
-                    className={`inline-flex min-w-[88px] justify-center rounded-full bg-gradient-to-r ${job.tone} px-3 py-1 text-xs font-semibold text-white shadow-sm`}
+                    className={`inline-flex min-w-[88px] justify-center rounded-full bg-gradient-to-r ${
+                      statusTone[job.status] ?? "from-[#e5e7eb] to-[#d1d5db]"
+                    } px-3 py-1 text-xs font-semibold text-white shadow-sm`}
                   >
                     {job.status}
                   </div>
                   <div className="rounded-xl bg-[#f6f1fb] px-3 py-2 text-xs font-semibold text-[#8a90a6]">
-                    {job.resumes} resumes
+                    Updated {job.updated}
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
 
@@ -228,48 +253,60 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-[#1f2a44]">Top Candidates</h3>
-                <p className="text-sm text-[#8a90a6]">Ranked by AI match and signals.</p>
+                <p className="text-sm text-[#8a90a6]">Newest candidates in your org.</p>
               </div>
-              <div className="hidden text-xs font-semibold uppercase tracking-[0.18em] text-primary-500 sm:block">
-                Updated just now
-              </div>
+              <Link
+                href="/history"
+                className="hidden text-sm font-semibold text-primary-500 transition hover:text-primary-600 sm:block"
+              >
+                See all
+              </Link>
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-white/70">
               <div className="grid grid-cols-5 bg-[#f7f2fb] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#8a90a6]">
                 <span className="col-span-2">Candidate</span>
-                <span>Match</span>
-                <span>Top Signals</span>
-                <span className="text-right">Stage</span>
+                <span>Tags</span>
+                <span>Source</span>
+                <span className="text-right">Added</span>
               </div>
               <div className="divide-y divide-[#f0e8f7] bg-white">
-                {candidates.map((candidate) => (
-                  <div key={candidate.name} className="grid grid-cols-5 items-center px-4 py-3 text-sm text-[#1f2a44]">
+                {candidateList.map((candidate) => (
+                  <div key={candidate.id} className="grid grid-cols-5 items-center px-4 py-3 text-sm text-[#1f2a44]">
                     <div className="col-span-2 flex items-center gap-3">
-                      <div className={`grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br ${candidate.tone} text-sm font-bold text-white shadow-sm`}>
-                        {candidate.name.charAt(0)}
+                      <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-[#eef2ff] to-[#fde7f3] text-sm font-bold text-[#1f2a44] shadow-sm">
+                        {candidate.fullName.charAt(0)}
                       </div>
-                      <span className="font-semibold">{candidate.name}</span>
+                      <div>
+                        <p className="font-semibold">{candidate.fullName}</p>
+                        <p className="text-xs text-[#6B7280]">{candidate.headline ?? candidate.location ?? "Candidate"}</p>
+                      </div>
                     </div>
                     <div>
-                      <span
-                        className={`inline-flex min-w-[48px] justify-center rounded-full bg-gradient-to-r ${candidate.tone} px-3 py-1 text-sm font-bold text-white`}
-                      >
-                        {candidate.match}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {(candidate.tags ?? []).slice(0, 3).map((tag) => (
+                          <span key={tag} className="rounded-full bg-[#f6f1fb] px-2 py-0.5 text-[11px] font-semibold text-[#8a90a6]">
+                            {tag}
+                          </span>
+                        ))}
+                        {!candidate.tags?.length && <span className="text-xs text-[#9CA3AF]">—</span>}
+                      </div>
                     </div>
-                    <div className="text-[#8a90a6]">{candidate.signals}</div>
+                    <div className="text-[#8a90a6]">{candidate.source ?? "—"}</div>
                     <div className="text-right">
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#f6f1fb] px-3 py-1 text-xs font-semibold text-[#8a90a6]">
                         <Clock className="h-3.5 w-3.5" />
-                        {candidate.stage}
+                        {new Date(candidate.createdAt).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
                 ))}
+                {!candidateList.length && (
+                  <div className="px-4 py-3 text-sm text-[#8a90a6]">No candidates yet.</div>
+                )}
               </div>
             </div>
-            <p className="mt-3 text-xs text-[#8a90a6]">Tip: Click "Open" to view scoring explanation & resume highlights.</p>
+            <p className="mt-3 text-xs text-[#8a90a6]">Tip: Click “Open” to view scoring explanation &amp; resume highlights.</p>
           </div>
         </section>
 

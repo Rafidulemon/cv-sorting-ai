@@ -12,27 +12,11 @@ import {
   Filter,
   LineChart,
   Plus,
-  Sparkles,
   Users2,
 } from "lucide-react";
 import { Pagination } from "@/app/components/Pagination";
-import type { JobSummary, SortingState } from "./data";
-import { jobs as jobSummaries } from "./data";
-
-const jobVelocity = [
-  { label: "Mon", value: 6 },
-  { label: "Tue", value: 9 },
-  { label: "Wed", value: 5 },
-  { label: "Thu", value: 11 },
-  { label: "Fri", value: 7 },
-];
-
-const stageDistribution = [
-  { label: "Screening", count: 24 },
-  { label: "Interview", count: 14 },
-  { label: "Offer", count: 6 },
-  { label: "Hired", count: 3 },
-];
+import type { ApiJob, JobSummary, SortingState } from "./data";
+import { mapJobToSummary } from "./data";
 
 const statusStyles: Record<string, string> = {
   Active: "bg-[#E8F2FF] text-[#1C64F2]",
@@ -45,65 +29,79 @@ const sortingStyles: Record<
   SortingState,
   { label: string; className: string }
 > = {
-  not_started: {
+  NOT_STARTED: {
     label: "Needs sorting",
     className: "bg-[#FFF5E5] text-[#9A5B00]",
   },
-  processing: { label: "Processing", className: "bg-[#FEF3C7] text-[#92400E]" },
-  completed: { label: "Sorted", className: "bg-[#E6F4EA] text-[#1B806A]" },
+  PROCESSING: { label: "Processing", className: "bg-[#FEF3C7] text-[#92400E]" },
+  COMPLETED: { label: "Sorted", className: "bg-[#E6F4EA] text-[#1B806A]" },
 };
-
-const maxVelocity = Math.max(...jobVelocity.map((item) => item.value));
-const linePoints = jobVelocity
-  .map((item, index) => {
-    const x = (index / (jobVelocity.length - 1)) * 100;
-    const y = 100 - (item.value / maxVelocity) * 100;
-    return `${x},${y}`;
-  })
-  .join(" ");
 
 const sortingFilterOptions: Array<{
   value: "all" | SortingState;
   label: string;
 }> = [
   { value: "all", label: "All sorting states" },
-  { value: "not_started", label: "Needs sorting" },
-  { value: "processing", label: "Processing" },
-  { value: "completed", label: "Sorted" },
-];
-
-const statusFilterOptions: Array<{
-  value: "all" | JobSummary["status"];
-  label: string;
-}> = [
-  { value: "all", label: "All statuses" },
-  { value: "Active", label: "Active" },
-  { value: "Reviewing", label: "Reviewing" },
-  { value: "Draft", label: "Draft" },
-  { value: "Completed", label: "Completed" },
+  { value: "NOT_STARTED", label: "Needs sorting" },
+  { value: "PROCESSING", label: "Processing" },
+  { value: "COMPLETED", label: "Sorted" },
 ];
 
 export default function JobsPage() {
-  const [sortingFilter, setSortingFilter] = useState<"all" | SortingState>(
-    "all"
-  );
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | JobSummary["status"]
-  >("all");
+  const [sortingFilter, setSortingFilter] = useState<"all" | SortingState>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | JobSummary["status"]>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [rawJobs, setRawJobs] = useState<ApiJob[]>([]);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [jobsPage, setJobsPage] = useState(1);
   const jobsPageSize = 5;
+
+  useEffect(() => {
+    const loadJobs = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const response = await fetch("/api/jobs", { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error ?? "Failed to load jobs");
+        }
+        const apiJobs = Array.isArray(payload?.jobs) ? (payload.jobs as ApiJob[]) : [];
+        setViewerId((payload?.viewerId as string | undefined) ?? null);
+        setRawJobs(apiJobs);
+        setJobs(apiJobs.map(mapJobToSummary));
+      } catch (err) {
+        const message = (err as Error)?.message ?? "Failed to load jobs";
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadJobs();
+  }, []);
+
+  const statusFilterOptions: Array<{ value: "all" | JobSummary["status"]; label: string }> = useMemo(() => {
+    const unique = new Set(jobs.map((job) => job.status));
+    return ["all", ...Array.from(unique)].map((status) => ({
+      value: status as "all" | JobSummary["status"],
+      label: status === "all" ? "All statuses" : status,
+    }));
+  }, [jobs]);
 
   const filteredJobs = useMemo(() => {
     const matchesFilters = (job: JobSummary) => {
       const matchesSorting =
         sortingFilter === "all"
           ? true
-          : sortingFilter === "processing"
-          ? job.sortingState === "processing"
-          : sortingFilter === "completed"
-          ? job.sortingState === "completed"
-          : job.sortingState === "not_started";
+          : sortingFilter === "PROCESSING"
+          ? job.sortingState === "PROCESSING"
+          : sortingFilter === "COMPLETED"
+          ? job.sortingState === "COMPLETED"
+          : job.sortingState === "NOT_STARTED";
 
       const matchesStatus =
         statusFilter === "all" ? true : job.status === statusFilter;
@@ -117,8 +115,8 @@ export default function JobsPage() {
       return matchesSorting && matchesStatus && matchesSearch;
     };
 
-    return jobSummaries.filter(matchesFilters);
-  }, [searchTerm, sortingFilter, statusFilter]);
+    return jobs.filter(matchesFilters);
+  }, [jobs, searchTerm, sortingFilter, statusFilter]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filteredJobs.length / jobsPageSize));
@@ -131,6 +129,59 @@ export default function JobsPage() {
     const start = (jobsPage - 1) * jobsPageSize;
     return filteredJobs.slice(start, start + jobsPageSize);
   }, [filteredJobs, jobsPage, jobsPageSize]);
+
+  const yourJobs = useMemo(() => {
+    if (!viewerId) return [];
+    return rawJobs.filter((job) => job.createdBy?.id === viewerId).map(mapJobToSummary);
+  }, [rawJobs, viewerId]);
+
+  const jobVelocity = useMemo(() => {
+    const today = new Date();
+    const days: Record<string, number> = {};
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach((day) => {
+      days[day] = 0;
+    });
+    rawJobs.forEach((job) => {
+      if (!job.createdAt) return;
+      const created = new Date(job.createdAt);
+      const diffDays = (today.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays <= 6) {
+        days[created.toLocaleDateString("en-US", { weekday: "short" })] += 1;
+      }
+    });
+    return Object.entries(days).map(([label, value]) => ({ label, value }));
+  }, [rawJobs]);
+
+  const maxVelocity = useMemo(() => {
+    const values = jobVelocity.map((item) => item.value);
+    const max = values.length ? Math.max(...values) : 0;
+    return max || 1;
+  }, [jobVelocity]);
+
+  const linePoints = useMemo(() => {
+    if (!jobVelocity.length) return "";
+    return jobVelocity
+      .map((item, index) => {
+        const x = jobVelocity.length === 1 ? 0 : (index / (jobVelocity.length - 1)) * 100;
+        const y = 100 - (item.value / maxVelocity) * 100;
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }, [jobVelocity, maxVelocity]);
+
+  const stageDistribution = useMemo(() => {
+    const counts: Record<string, number> = {};
+    rawJobs.forEach((job) => {
+      const label = mapJobToSummary(job).status;
+      counts[label] = (counts[label] ?? 0) + 1;
+    });
+    return Object.entries(counts).map(([label, count]) => ({ label, count }));
+  }, [rawJobs]);
+
+  const hasVelocityData = useMemo(
+    () => jobVelocity.some((item) => item.value > 0),
+    [jobVelocity],
+  );
 
   return (
     <div className="space-y-10 text-[#181B31]">
@@ -163,9 +214,7 @@ export default function JobsPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">
                   New jobs this week
                 </p>
-                <h2 className="text-lg font-semibold text-[#181B31]">
-                  Velocity
-                </h2>
+                <h2 className="text-lg font-semibold text-[#181B31]">Velocity</h2>
               </div>
             </div>
             <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#3D64FF]">
@@ -173,77 +222,51 @@ export default function JobsPage() {
             </span>
           </div>
           <div className="mt-5 rounded-2xl bg-gradient-to-br from-[#F5F7FB] to-white p-5">
-            <svg viewBox="0 0 100 100" className="h-48 w-full">
-              <defs>
-                <linearGradient
-                  id="lineGradient"
-                  x1="0%"
-                  y1="0%"
-                  x2="0%"
-                  y2="100%"
-                >
-                  <stop offset="0%" stopColor="#3D64FF" stopOpacity="0.5" />
-                  <stop offset="100%" stopColor="#3D64FF" stopOpacity="0.05" />
-                </linearGradient>
-              </defs>
-              <polyline
-                fill="url(#lineGradient)"
-                stroke="none"
-                points={`0,100 ${linePoints} 100,100`}
-              />
-              <polyline
-                fill="none"
-                stroke="#3D64FF"
-                strokeWidth="2.5"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                points={linePoints}
-              />
-              {jobVelocity.map((item, index) => {
-                const x = (index / (jobVelocity.length - 1)) * 100;
-                const y = 100 - (item.value / maxVelocity) * 100;
-                return (
-                  <circle
-                    key={item.label}
-                    cx={x}
-                    cy={y}
-                    r="2.2"
-                    fill="#3D64FF"
-                  />
-                );
-              })}
-              {jobVelocity.map((item, index) => {
-                const x = (index / (jobVelocity.length - 1)) * 100;
-                const y = 100 - (item.value / maxVelocity) * 100;
-                return (
-                  <text
-                    key={`${item.label}-label`}
-                    x={x}
-                    y={y - 5}
-                    textAnchor="middle"
-                    fontSize="7"
-                    fill="#4B5563"
-                  >
-                    {item.value}
-                  </text>
-                );
-              })}
-              {jobVelocity.map((item, index) => {
-                const x = (index / (jobVelocity.length - 1)) * 100;
-                return (
-                  <text
-                    key={`${item.label}-axis`}
-                    x={x}
-                    y={98}
-                    textAnchor="middle"
-                    fontSize="7"
-                    fill="#9CA3AF"
-                  >
-                    {item.label}
-                  </text>
-                );
-              })}
-            </svg>
+            {hasVelocityData ? (
+              <svg viewBox="0 0 100 100" className="h-48 w-full">
+                <defs>
+                  <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#3D64FF" stopOpacity="0.5" />
+                    <stop offset="100%" stopColor="#3D64FF" stopOpacity="0.05" />
+                  </linearGradient>
+                </defs>
+                <polyline fill="url(#lineGradient)" stroke="none" points={`0,100 ${linePoints} 100,100`} />
+                <polyline
+                  fill="none"
+                  stroke="#3D64FF"
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  points={linePoints}
+                />
+                {jobVelocity.map((item, index) => {
+                  const x = (index / (jobVelocity.length - 1)) * 100;
+                  const y = 100 - (item.value / maxVelocity) * 100;
+                  return <circle key={item.label} cx={x} cy={y} r="2.2" fill="#3D64FF" />;
+                })}
+                {jobVelocity.map((item, index) => {
+                  const x = (index / (jobVelocity.length - 1)) * 100;
+                  const y = 100 - (item.value / maxVelocity) * 100;
+                  return (
+                    <text key={`${item.label}-label`} x={x} y={y - 5} textAnchor="middle" fontSize="7" fill="#4B5563">
+                      {item.value}
+                    </text>
+                  );
+                })}
+                {jobVelocity.map((item, index) => {
+                  const x = (index / (jobVelocity.length - 1)) * 100;
+                  return (
+                    <text key={`${item.label}-axis`} x={x} y={98} textAnchor="middle" fontSize="7" fill="#9CA3AF">
+                      {item.label}
+                    </text>
+                  );
+                })}
+              </svg>
+            ) : (
+              <div className="flex h-48 items-center justify-center rounded-2xl bg-white/60 text-sm text-[#6B7280]">
+                No jobs created in the past week.
+              </div>
+            )}
           </div>
         </div>
 
@@ -264,9 +287,9 @@ export default function JobsPage() {
           </div>
           <div className="mt-5 space-y-4">
             {stageDistribution.map((stage) => {
-              const maxCount = Math.max(
-                ...stageDistribution.map((item) => item.count)
-              );
+              const maxCount = stageDistribution.length
+                ? Math.max(...stageDistribution.map((item) => item.count))
+                : 1;
               const width = `${Math.max(12, (stage.count / maxCount) * 100)}%`;
               return (
                 <div key={stage.label} className="space-y-2">
@@ -287,9 +310,59 @@ export default function JobsPage() {
                 </div>
               );
             })}
+            {!stageDistribution.length && (
+              <p className="text-xs text-[#9CA3AF]">No jobs yet. Create one to see pipeline load.</p>
+            )}
           </div>
         </div>
       </div>
+
+      {viewerId && (
+        <div className="rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-card-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">
+                Your jobs
+              </p>
+              <h2 className="text-lg font-semibold text-[#181B31]">Created by you</h2>
+            </div>
+            <Link
+              href="/jobs/new"
+              className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F5F7FB]"
+            >
+              Start new
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {yourJobs.length ? (
+              yourJobs.slice(0, 5).map((job) => (
+                <Link
+                  key={job.id}
+                  href={`/jobs/${job.id}`}
+                  className="flex items-center justify-between rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/60 px-4 py-3 text-sm text-[#1F2A44] transition hover:bg-white"
+                >
+                  <div>
+                    <p className="font-semibold">{job.title}</p>
+                    <p className="text-xs text-[#6B7280]">Updated {job.updated}</p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                      statusStyles[job.status] ?? "bg-[#EEF2F7] text-[#1F2A44]"
+                    }`}
+                  >
+                    <span className="h-2 w-2 rounded-full bg-current" />
+                    {job.status}
+                  </span>
+                </Link>
+              ))
+            ) : (
+              <p className="text-sm text-[#6B7280]">No jobs created by you yet.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-card-soft">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -331,7 +404,7 @@ export default function JobsPage() {
                       : "border-[#E5E7EB] text-[#4B5563] hover:border-[#3D64FF]/40 hover:text-[#3D64FF]"
                   }`}
                 >
-                  {option.value === "not_started" && (
+                  {option.value === "NOT_STARTED" && (
                     <AlertTriangle className="h-3.5 w-3.5" />
                   )}
                   {option.label}
@@ -388,62 +461,73 @@ export default function JobsPage() {
             <span>Owner</span>
             <span>Activity</span>
           </div>
-          {paginatedJobs.map((job) => (
-            <Link
-              key={job.id}
-              href={`/jobs/${job.id}`}
-              className="grid grid-cols-[1.6fr_0.9fr_1fr_1fr_0.95fr] items-center gap-3 px-4 py-4 text-sm text-[#1F2A44] transition hover:bg-white"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold">{job.title}</p>
-                  {job.sortingState === "not_started" && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF1F2] px-2 py-1 text-[11px] font-semibold text-[#9A1035]">
-                      <AlertTriangle className="h-3 w-3" />
-                      Needs sorting
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-[#6B7280]">
-                  <CalendarClock className="h-3.5 w-3.5" />
-                  <span>Created {job.created}</span>
-                </div>
-              </div>
-              <span
-                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                  statusStyles[job.status] ?? "bg-[#EEF2F7] text-[#1F2A44]"
-                }`}
+          {error && (
+            <div className="px-4 py-6 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+          {loading && !error && (
+            <div className="px-4 py-6 text-sm text-[#6B7280]">Loading jobs...</div>
+          )}
+          {!loading &&
+            !error &&
+            paginatedJobs.map((job) => (
+              <Link
+                key={job.id}
+                href={`/jobs/${job.id}`}
+                className="grid grid-cols-[1.6fr_0.9fr_1fr_1fr_0.95fr] items-center gap-3 px-4 py-4 text-sm text-[#1F2A44] transition hover:bg-white"
               >
-                <span className="h-2 w-2 rounded-full bg-current" />
-                {job.status}
-              </span>
-              <span
-                className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                  sortingStyles[job.sortingState].className
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-current" />
-                {sortingStyles[job.sortingState].label}
-              </span>
-              <span className="text-sm font-medium text-[#1F2A44]">
-                {job.owner}
-              </span>
-              <div className="flex items-center justify-between gap-2 text-xs text-[#6B7280]">
-                <span className="flex flex-col gap-1">
-                  <span>
-                    Updated {job.updated}
-                    {job.lastSorted ? ` • Last sort ${job.lastSorted}` : ""}
-                  </span>
-                  <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[#EAF7ED] px-3 py-1 font-semibold text-[#1B806A]">
-                    <Users2 className="h-3.5 w-3.5" />
-                    Shortlist {job.shortlist}
-                  </span>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold">{job.title}</p>
+                    {job.sortingState === "NOT_STARTED" && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF1F2] px-2 py-1 text-[11px] font-semibold text-[#9A1035]">
+                        <AlertTriangle className="h-3 w-3" />
+                        Needs sorting
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    <span>Created {job.created}</span>
+                  </div>
+                </div>
+                <span
+                  className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                    statusStyles[job.status] ?? "bg-[#EEF2F7] text-[#1F2A44]"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  {job.status}
                 </span>
-                <ChevronRight className="h-4 w-4 text-[#C0C4CC]" />
-              </div>
-            </Link>
-          ))}
-          {filteredJobs.length === 0 && (
+                <span
+                  className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                    sortingStyles[job.sortingState]?.className ??
+                    "bg-[#EEF2F7] text-[#1F2A44]"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  {sortingStyles[job.sortingState]?.label ?? "Unknown"}
+                </span>
+                <span className="text-sm font-medium text-[#1F2A44]">
+                  {job.owner}
+                </span>
+                <div className="flex items-center justify-between gap-2 text-xs text-[#6B7280]">
+                  <span className="flex flex-col gap-1">
+                    <span>
+                      Updated {job.updated}
+                      {job.lastSorted ? ` • Last sort ${job.lastSorted}` : ""}
+                    </span>
+                    <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[#EAF7ED] px-3 py-1 font-semibold text-[#1B806A]">
+                      <Users2 className="h-3.5 w-3.5" />
+                      Shortlist {job.shortlist}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-[#C0C4CC]" />
+                </div>
+              </Link>
+            ))}
+          {!loading && !error && filteredJobs.length === 0 && (
             <div className="px-4 py-6 text-sm text-[#6B7280]">
               No jobs match the selected filters. Try clearing the search or
               sorting state.

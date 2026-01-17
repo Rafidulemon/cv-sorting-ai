@@ -6,7 +6,6 @@ import {
   OrganizationStatus,
   PrismaClient,
   SubscriptionStatus,
-  UserRole,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { orgs } from './seeds/orgs';
@@ -17,7 +16,7 @@ import {
   creditUsageRows as creditUsageSeeds,
   freePlanNudge as freePlanNudgeSeed,
 } from './seeds/pricing';
-import { jobOptionSeeds } from './seeds/jobOptions';
+import { candidates as candidateSeeds } from './seeds/candidates';
 
 const prisma = new PrismaClient();
 
@@ -138,29 +137,6 @@ async function main() {
     },
   });
 
-  for (const category of jobOptionSeeds) {
-    for (const option of category.options) {
-      await prisma.jobOption.upsert({
-        where: {
-          category_value: {
-            category: category.category,
-            value: option.value,
-          },
-        },
-        update: {
-          label: option.label ?? option.value,
-          sortOrder: option.sortOrder ?? 0,
-        },
-        create: {
-          category: category.category,
-          value: option.value,
-          label: option.label ?? option.value,
-          sortOrder: option.sortOrder ?? 0,
-        },
-      });
-    }
-  }
-
   for (const user of users) {
     const passwordHash = await hashPassword(user.password);
     const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.firstName;
@@ -194,6 +170,29 @@ async function main() {
         passwordHash,
         image: user.image ?? '/images/default_dp.png',
         lastLoginAt: new Date(),
+      },
+    });
+  }
+
+  for (const candidate of candidateSeeds) {
+    await prisma.candidate.upsert({
+      where: { id: candidate.id },
+      update: {
+        fullName: candidate.fullName,
+        phone: candidate.phone,
+        location: candidate.location,
+        headline: candidate.headline,
+        source: candidate.source,
+        currentCompany: candidate.currentCompany,
+        currentTitle: candidate.currentTitle,
+        linkedinUrl: candidate.linkedinUrl,
+        githubUrl: candidate.githubUrl,
+        portfolioUrl: candidate.portfolioUrl,
+        yearsExperience: candidate.yearsExperience,
+        tags: candidate.tags,
+      },
+      create: {
+        ...candidate,
       },
     });
   }

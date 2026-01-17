@@ -16,20 +16,20 @@ import {
   Users2,
 } from 'lucide-react';
 import type { SortingState } from '../data';
-import { jobDetails } from '../data';
+import { mapJobToDetail, type ApiJob, type JobDetail } from '../data';
 
 const sortingTone: Record<SortingState, { label: string; className: string; helper: string }> = {
-  not_started: {
+  NOT_STARTED: {
     label: 'Needs sorting',
     className: 'bg-[#FFF5E5] text-[#9A5B00]',
     helper: 'No sorting run yet. Kick off the first pass to get a shortlist.',
   },
-  processing: {
+  PROCESSING: {
     label: 'Processing',
     className: 'bg-[#FEF3C7] text-[#92400E]',
     helper: 'Sorting in progress. We will refresh results once complete.',
   },
-  completed: {
+  COMPLETED: {
     label: 'Sorted',
     className: 'bg-[#E6F4EA] text-[#1B806A]',
     helper: 'Last run complete. Rerun anytime with new CVs or updated criteria.',
@@ -41,24 +41,52 @@ export default function JobDetailPage() {
   const pathname = usePathname();
 
   const jobId = useMemo(() => pathname?.split('/').filter(Boolean).pop() ?? '', [pathname]);
-  const job = jobDetails[jobId];
-  const [sortingState, setSortingState] = useState<SortingState>(job?.sortingState ?? 'not_started');
-  const [lastSorted, setLastSorted] = useState<string | null>(job?.lastSorted ?? null);
-  const [runCount, setRunCount] = useState(job?.sortingRuns ?? (job?.sortingState === 'completed' ? 1 : 0));
+  const [job, setJob] = useState<JobDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [sortingState, setSortingState] = useState<SortingState>('NOT_STARTED');
+  const [lastSorted, setLastSorted] = useState<string | null>(null);
+  const [runCount, setRunCount] = useState(0);
   const [isKickingOff, setIsKickingOff] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!job) {
-      router.replace('/jobs');
-    }
-  }, [job, router]);
+    const loadJob = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const response = await fetch('/api/jobs', { cache: 'no-store' });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error ?? 'Failed to load job');
+        }
+        const apiJobs = Array.isArray(payload?.jobs) ? (payload.jobs as ApiJob[]) : [];
+        const match = apiJobs.find((item) => item.id === jobId);
+        if (!match) {
+          setError('Job not found');
+          return;
+        }
+        const detail = mapJobToDetail(match);
+        setJob(detail);
+        setSortingState(detail.sortingState);
+        setLastSorted(detail.lastSorted ?? null);
+        const runs = match.sortingRuns ?? (match.sortingState === 'COMPLETED' ? 1 : 0);
+        setRunCount(runs);
+      } catch (err) {
+        const message = (err as Error)?.message ?? 'Failed to load job';
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadJob();
+  }, [jobId, router]);
 
   useEffect(() => {
     if (!job) return;
     setSortingState(job.sortingState);
     setLastSorted(job.lastSorted ?? null);
-    setRunCount(job.sortingRuns ?? (job.sortingState === 'completed' ? 1 : 0));
     setIsKickingOff(false);
   }, [job]);
 
@@ -70,7 +98,26 @@ export default function JobDetailPage() {
     };
   }, []);
 
-  if (!job) return null;
+  if (loading) {
+    return (
+      <div className="space-y-4 rounded-3xl border border-[#E5E7EB] bg-white p-6 text-sm text-[#4B5563] shadow-card-soft">
+        Loading job details...
+      </div>
+    );
+  }
+
+  if (!job || error) {
+    return (
+      <div className="space-y-4 rounded-3xl border border-[#F59E0B] bg-[#FFF7E6] p-6 text-sm text-[#92400E] shadow-card-soft">
+        {error || 'Job not found'}
+        <div>
+          <Link href="/jobs" className="text-[#3D64FF] underline">
+            Back to jobs
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const statusTone =
     job.status === 'Active'
@@ -81,15 +128,15 @@ export default function JobDetailPage() {
           ? 'bg-[#E9E5FF] text-[#5B32D2]'
           : 'bg-[#E6F4EA] text-[#1B806A]';
 
-  const canViewResults = sortingState === 'completed';
-  const disableStart = isKickingOff || sortingState === 'processing';
+  const canViewResults = sortingState === 'COMPLETED';
+  const disableStart = isKickingOff || sortingState === 'PROCESSING';
 
   const startSorting = () => {
     if (disableStart) return;
     setIsKickingOff(true);
-    setSortingState('processing');
+    setSortingState('PROCESSING');
     timeoutRef.current = setTimeout(() => {
-      setSortingState('completed');
+      setSortingState('COMPLETED');
       setLastSorted('Just now');
       setRunCount((prev) => prev + 1);
       setIsKickingOff(false);
@@ -131,7 +178,7 @@ export default function JobDetailPage() {
             </span>
             <span className="inline-flex items-center gap-2">
               <MapPin className="h-4 w-4 text-[#3D64FF]" />
-              {job.location}
+              {job.location ?? 'Location TBD'}
             </span>
           </div>
         </div>
@@ -187,7 +234,7 @@ export default function JobDetailPage() {
           </span>
         </div>
 
-        {sortingState === 'processing' && (
+        {sortingState === 'PROCESSING' && (
           <div className="mt-4 space-y-2">
             <div className="h-2 w-full overflow-hidden rounded-full bg-[#EEF2F7]">
               <div className="h-full animate-pulse rounded-full bg-gradient-to-r from-[#8A94A6] via-[#3D64FF]/70 to-[#3D64FF]" />
@@ -207,8 +254,8 @@ export default function JobDetailPage() {
             }`}
             disabled={disableStart}
           >
-            {sortingState === 'completed' ? <RotateCcw className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-            {sortingState === 'completed' ? 'Rerun sorting' : 'Start CV sorting'}
+            {sortingState === 'COMPLETED' ? <RotateCcw className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+            {sortingState === 'COMPLETED' ? 'Rerun sorting' : 'Start CV sorting'}
             {isKickingOff && <Loader2 className="h-4 w-4 animate-spin" />}
           </button>
           {canViewResults ? (
@@ -242,14 +289,20 @@ export default function JobDetailPage() {
             </div>
             <span className="text-xs text-[#8A94A6]">Updated {job.updated}</span>
           </div>
-          <p className="mt-4 text-sm leading-relaxed text-[#4B5563]">{job.summary}</p>
+          <p className="mt-4 text-sm leading-relaxed text-[#4B5563]">
+            {job.description || 'No description available yet.'}
+          </p>
           <div className="mt-5 space-y-2 rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/70 p-4">
-            {job.requirements.map((item) => (
-              <div key={item} className="flex items-start gap-2 text-sm text-[#1F2A44]">
-                <BadgeCheck className="mt-1 h-4 w-4 text-[#3D64FF]" />
-                <span>{item}</span>
-              </div>
-            ))}
+            {job.requirements?.length ? (
+              job.requirements.map((item) => (
+                <div key={item} className="flex items-start gap-2 text-sm text-[#1F2A44]">
+                  <BadgeCheck className="mt-1 h-4 w-4 text-[#3D64FF]" />
+                  <span>{item}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-[#6B7280]">No requirements parsed yet.</p>
+            )}
           </div>
         </div>
 
@@ -262,38 +315,21 @@ export default function JobDetailPage() {
             </div>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-3">
-            {job.metrics.map((metric) => (
-              <div
-                key={metric.label}
-                className="rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/80 p-4 text-sm shadow-inner"
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">{metric.label}</p>
-                <p className="mt-1 text-xl font-semibold text-[#181B31]">{metric.value}</p>
-                <p className="text-xs text-[#6B7280]">{metric.helper}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 space-y-3">
-            {job.updates.map((update) => (
-              <div
-                key={update.label}
-                className="flex items-center justify-between rounded-2xl border border-[#F0F2F5] bg-[#FFFFFF] px-4 py-3 text-sm text-[#1F2A44]"
-              >
-                <div className="space-y-1">
-                  <p className="font-semibold">{update.label}</p>
-                  <p className="text-xs text-[#6B7280]">{update.value}</p>
-                </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    update.tone === 'positive'
-                      ? 'bg-[#E6F4EA] text-[#1B806A]'
-                      : 'bg-[#F5F7FB] text-[#4B5563]'
-                  }`}
-                >
-                  {update.tone === 'positive' ? 'On track' : 'Pending'}
-                </span>
-              </div>
-            ))}
+            <div className="rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/80 p-4 text-sm shadow-inner">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Candidates</p>
+              <p className="mt-1 text-xl font-semibold text-[#181B31]">{job.candidates}</p>
+              <p className="text-xs text-[#6B7280]">Total uploaded</p>
+            </div>
+            <div className="rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/80 p-4 text-sm shadow-inner">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Shortlisted</p>
+              <p className="mt-1 text-xl font-semibold text-[#181B31]">{job.shortlist}</p>
+              <p className="text-xs text-[#6B7280]">Ready for review</p>
+            </div>
+            <div className="rounded-2xl border border-[#F0F2F5] bg-[#F9FAFB]/80 p-4 text-sm shadow-inner">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Status</p>
+              <p className="mt-1 text-xl font-semibold text-[#181B31]">{sortingTone[sortingState].label}</p>
+              <p className="text-xs text-[#6B7280]">{sortingTone[sortingState].helper}</p>
+            </div>
           </div>
         </div>
       </div>

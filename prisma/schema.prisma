@@ -76,12 +76,6 @@ enum EmploymentType {
   TEMPORARY
 }
 
-enum JobOptionCategory {
-  EXPERIENCE_LEVEL
-  EMPLOYMENT_TYPE
-  CURRENCY
-}
-
 enum ApplicationStatus {
   SUBMITTED
   REVIEW
@@ -144,9 +138,9 @@ enum AuditActorType {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String            @id @default(cuid())
   name          String?
-  email         String?   @unique
+  email         String?           @unique
   emailVerified DateTime?
   image         String?
   lastLoginAt   DateTime?
@@ -155,66 +149,66 @@ model User {
   team          String?
   timezone      String?
   profileStatus MembershipStatus?
-  role          UserRole   @default(VIEWER)
+  role          UserRole          @default(VIEWER)
   startedAt     DateTime?
   passwordHash  String?
   defaultOrgId  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
-  defaultOrg        Organization?  @relation("UserDefaultOrg", fields: [defaultOrgId], references: [id])
-  sessions          Session[]
-  invitations       Invitation[]   @relation("InvitationInviter")
-  createdOrgs       Organization[] @relation("OrgCreator")
+  defaultOrg         Organization?  @relation("UserDefaultOrg", fields: [defaultOrgId], references: [id])
+  sessions           Session[]
+  invitations        Invitation[]   @relation("InvitationInviter")
+  createdOrgs        Organization[] @relation("OrgCreator")
   ownedOrganizations Organization[] @relation("OrgOwner")
-  createdJobs       Job[]          @relation("JobCreator")
-  uploadedResumes   Resume[]       @relation("ResumeUploader")
-  uploadedFiles     FileObject[]   @relation("FileUploader")
-  exportRequests    ExportTask[]   @relation("ExportRequester")
-  pushDevices       PushDevice[]
-  notifications     Notification[]
-  auditLogs         AuditLog[]     @relation("AuditActorLogs")
-  queueJobs         QueueJob[]     @relation("QueueJobOwner")
+  createdJobs        Job[]          @relation("JobCreator")
+  uploadedResumes    Resume[]       @relation("ResumeUploader")
+  uploadedFiles      FileObject[]   @relation("FileUploader")
+  exportRequests     ExportTask[]   @relation("ExportRequester")
+  pushDevices        PushDevice[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]     @relation("AuditActorLogs")
+  queueJobs          QueueJob[]     @relation("QueueJobOwner")
 }
 
 model Organization {
-  id              String       @id @default(cuid())
-  name            String
-  slug            String       @unique
-  ownerId         String
-  companyEmail    String?
-  website         String?
-  logo            String?
-  domain          String?
-  industry        String?
-  size            String?
-  region          String?
-  hqLocation      String?
-  phone           String?
-  description     String?
-  planTier        PlanTier     @default(FREEMIUM)
-  planSlug        String       @default("free")
-  subscriptionStatus SubscriptionStatus @default(TRIALING)
-  billingCycle       BillingCycle       @default(MONTHLY)
-  renewsOn           DateTime?
-  startsOn           DateTime?
-  endsOn             DateTime?
-  provider           String?
+  id                     String             @id @default(cuid())
+  name                   String
+  slug                   String             @unique
+  ownerId                String
+  companyEmail           String?
+  website                String?
+  logo                   String?
+  domain                 String?
+  industry               String?
+  size                   String?
+  region                 String?
+  hqLocation             String?
+  phone                  String?
+  description            String?
+  planTier               PlanTier           @default(FREEMIUM)
+  planSlug               String             @default("free")
+  subscriptionStatus     SubscriptionStatus @default(TRIALING)
+  billingCycle           BillingCycle       @default(MONTHLY)
+  renewsOn               DateTime?
+  startsOn               DateTime?
+  endsOn                 DateTime?
+  provider               String?
   externalCustomerId     String?
   externalSubscriptionId String?
-  paymentDetails Json?
-  status          OrganizationStatus @default(PENDING)
-  seatLimit       Int          @default(1)
-  resumeAllotment Int          @default(10)
-  creditsBalance  Int          @default(0)
-  billingEmail    String?
-  createdById     String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  paymentDetails         Json?
+  status                 OrganizationStatus @default(PENDING)
+  seatLimit              Int                @default(1)
+  resumeAllotment        Int                @default(10)
+  creditsBalance         Int                @default(0)
+  billingEmail           String?
+  createdById            String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
-  owner         User                      @relation("OrgOwner", fields: [ownerId], references: [id])
-  createdBy     User?                      @relation("OrgCreator", fields: [createdById], references: [id])
-  plan          PricingPlan                @relation(fields: [planSlug], references: [slug])
+  owner         User             @relation("OrgOwner", fields: [ownerId], references: [id])
+  createdBy     User?            @relation("OrgCreator", fields: [createdById], references: [id])
+  plan          PricingPlan      @relation(fields: [planSlug], references: [slug])
   invitations   Invitation[]
   creditLedger  CreditLedger[]
   jobs          Job[]
@@ -227,7 +221,7 @@ model Organization {
   pushDevices   PushDevice[]
   queueJobs     QueueJob[]
   exportTasks   ExportTask[]
-  defaultUsers  User[]                     @relation("UserDefaultOrg")
+  defaultUsers  User[]           @relation("UserDefaultOrg")
 
   @@index([ownerId])
   @@index([planTier])
@@ -268,32 +262,32 @@ model CreditLedger {
 }
 
 model PricingPlan {
-  id              String   @id @default(cuid())
-  slug            String   @unique
-  name            String
-  description     String
-  price           Int
-  period          String
-  cta             String
-  highlight       Boolean  @default(false)
-  features        String[] @default([])
-  topUp           Int
-  monthlyCredits  Int
-  approxCvs       String
-  activeJobs      String
-  team            Int
-  support         String
-  apiAccess       Boolean  @default(false)
-  askAi           Boolean  @default(false)
-  aiJd            Boolean  @default(false)
-  ocr             String   @default("No")
-  semanticSearch  Boolean  @default(false)
-  sortOrder       Int      @default(0)
-  creditBundles   Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  name           String
+  description    String
+  price          Int
+  period         String
+  cta            String
+  highlight      Boolean  @default(false)
+  features       String[] @default([])
+  topUp          Int
+  monthlyCredits Int
+  approxCvs      String
+  activeJobs     String
+  team           Int
+  support        String
+  apiAccess      Boolean  @default(false)
+  askAi          Boolean  @default(false)
+  aiJd           Boolean  @default(false)
+  ocr            String   @default("No")
+  semanticSearch Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  creditBundles  Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  organizations   Organization[]
+  organizations Organization[]
 }
 
 model CreditUsage {
@@ -313,30 +307,30 @@ model FreePlanNudge {
 }
 
 model Job {
-  id             String          @id @default(cuid())
-  organizationId String
-  createdById    String?
-  title          String
-  status         JobStatus       @default(DRAFT)
-  sortingState   SortingState    @default(NOT_STARTED)
-  description    String?
-  previewHtml    String?
-  requirements   Json?
-  seniority      String?
-  employmentType EmploymentType?
-  locations      String[]        @default([])
-  tags           String[]        @default([])
-  openings       Int             @default(1)
-  cvSortedCount  Int             @default(0)
-  cvAnalyzedCount Int            @default(0)
-  lastActivityAt DateTime?
-  salaryMin      Int?
-  salaryMax      Int?
-  currency       String?         @default("BDT")
-  publishedAt    DateTime?
-  closesAt       DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  organizationId  String
+  createdById     String?
+  title           String
+  status          JobStatus       @default(DRAFT)
+  sortingState    SortingState    @default(NOT_STARTED)
+  description     String?
+  previewHtml     String?
+  requirements    Json?
+  seniority       String?
+  employmentType  EmploymentType?
+  locations       String[]        @default([])
+  tags            String[]        @default([])
+  openings        Int             @default(1)
+  cvSortedCount   Int             @default(0)
+  cvAnalyzedCount Int             @default(0)
+  lastActivityAt  DateTime?
+  salaryMin       Int?
+  salaryMax       Int?
+  currency        String?         @default("BDT")
+  publishedAt     DateTime?
+  closesAt        DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
   createdBy    User?        @relation("JobCreator", fields: [createdById], references: [id])
@@ -350,19 +344,6 @@ model Job {
 
   @@index([organizationId, status])
   @@index([organizationId, sortingState])
-}
-
-model JobOption {
-  id        String             @id @default(cuid())
-  category  JobOptionCategory
-  value     String
-  label     String?
-  sortOrder Int                @default(0)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-
-  @@index([category, sortOrder])
-  @@unique([category, value])
 }
 
 model JobEmbedding {

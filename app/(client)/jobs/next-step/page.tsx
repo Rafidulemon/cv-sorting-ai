@@ -1,11 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Briefcase, FileUp, Sparkles } from 'lucide-react';
-import type { JobSummary } from '../data';
-import { jobs, jobDetails } from '../data';
+import type { ApiJob, JobSummary } from '../data';
+import { mapJobToSummary } from '../data';
 import { useSession } from 'next-auth/react';
 
 type SelectedJob = {
@@ -21,13 +21,14 @@ export default function NextStepPage() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const currentUserName = session?.user?.name?.trim() || 'You';
+  const [jobOptions, setJobOptions] = useState<JobSummary[]>([]);
 
   const prefilledJobId = searchParams.get('jobId') ?? '';
   const prefilledJobTitle = searchParams.get('title') ?? '';
 
   const prefilledJob = useMemo<SelectedJob | null>(() => {
     if (!prefilledJobId && !prefilledJobTitle) return null;
-    const knownJob = prefilledJobId ? jobDetails[prefilledJobId] ?? jobs.find((job) => job.id === prefilledJobId) : null;
+    const knownJob = prefilledJobId ? jobOptions.find((job) => job.id === prefilledJobId) : null;
     if (knownJob) {
       return {
         id: knownJob.id,
@@ -42,14 +43,34 @@ export default function NextStepPage() {
       title: prefilledJobTitle || 'Untitled role',
       status: prefilledJobId ? 'Draft' : undefined,
     };
-  }, [prefilledJobId, prefilledJobTitle]);
+  }, [jobOptions, prefilledJobId, prefilledJobTitle]);
 
   const [selectedJobId, setSelectedJobId] = useState(prefilledJob?.id ?? '');
   const [selectedJobTitle, setSelectedJobTitle] = useState(prefilledJob?.title ?? '');
 
+  useEffect(() => {
+    const loadJobs = async () => {
+      try {
+        const response = await fetch('/api/jobs', { cache: 'no-store' });
+        const payload = await response.json();
+        const apiJobs = Array.isArray(payload?.jobs) ? (payload.jobs as ApiJob[]) : [];
+        const summaries = apiJobs.map(mapJobToSummary);
+        setJobOptions(summaries);
+        if (prefilledJobId && !selectedJobId) {
+          const found = summaries.find((job) => job.id === prefilledJobId);
+          setSelectedJobId(prefilledJobId);
+          setSelectedJobTitle(found?.title ?? prefilledJobTitle);
+        }
+      } catch {
+        setJobOptions([]);
+      }
+    };
+    loadJobs();
+  }, [prefilledJobId, prefilledJobTitle, selectedJobId]);
+
   const selectedJob = useMemo<SelectedJob | null>(() => {
     if (selectedJobId) {
-      const knownJob = jobDetails[selectedJobId] ?? jobs.find((job) => job.id === selectedJobId);
+      const knownJob = jobOptions.find((job) => job.id === selectedJobId);
       if (knownJob) {
         return {
           id: knownJob.id,
@@ -70,7 +91,7 @@ export default function NextStepPage() {
     }
 
     return null;
-  }, [selectedJobId, selectedJobTitle]);
+  }, [jobOptions, selectedJobId, selectedJobTitle]);
 
   const handleProceedToUploads = () => {
     if (!selectedJob) return;
@@ -209,13 +230,13 @@ export default function NextStepPage() {
               onChange={(event) => {
                 const nextId = event.target.value;
                 setSelectedJobId(nextId);
-                const found = jobs.find((job) => job.id === nextId);
+                const found = jobOptions.find((job) => job.id === nextId);
                 setSelectedJobTitle(found?.title ?? '');
               }}
               className="w-full rounded-2xl border border-[#DCE0E0] bg-[#F7F9FC] px-4 py-3 text-sm text-[#181B31] focus:border-[#3D64FF]/60 focus:outline-none"
             >
               <option value="">Select a job</option>
-              {jobs.map((job) => (
+              {jobOptions.map((job) => (
                 <option key={job.id} value={job.id}>
                   {job.title} — {job.status}
                 </option>
