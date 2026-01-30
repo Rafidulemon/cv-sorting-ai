@@ -5,6 +5,9 @@ CREATE TYPE "UserRole" AS ENUM ('SUPER_ADMIN', 'COMPANY_ADMIN', 'COMPANY_MEMBER'
 CREATE TYPE "MembershipStatus" AS ENUM ('PENDING', 'ACTIVE', 'DISABLED');
 
 -- CreateEnum
+CREATE TYPE "OrganizationStatus" AS ENUM ('PENDING', 'EMAIL_VERIFIED', 'COMPLETED');
+
+-- CreateEnum
 CREATE TYPE "PlanTier" AS ENUM ('FREEMIUM', 'STANDARD', 'ENTERPRISE');
 
 -- CreateEnum
@@ -24,9 +27,6 @@ CREATE TYPE "SortingState" AS ENUM ('NOT_STARTED', 'PROCESSING', 'COMPLETED');
 
 -- CreateEnum
 CREATE TYPE "EmploymentType" AS ENUM ('FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY');
-
--- CreateEnum
-CREATE TYPE "JobOptionCategory" AS ENUM ('EXPERIENCE_LEVEL', 'EMPLOYMENT_TYPE', 'CURRENCY');
 
 -- CreateEnum
 CREATE TYPE "ApplicationStatus" AS ENUM ('SUBMITTED', 'REVIEW', 'SHORTLIST', 'HOLD', 'REJECTED', 'HIRED');
@@ -64,10 +64,11 @@ CREATE TABLE "User" (
     "image" TEXT,
     "lastLoginAt" TIMESTAMP(3),
     "phone" TEXT,
-    "title" TEXT,
+    "designation" TEXT,
     "team" TEXT,
     "timezone" TEXT,
-    "profileStatus" TEXT,
+    "profileStatus" "MembershipStatus",
+    "role" "UserRole" NOT NULL DEFAULT 'VIEWER',
     "startedAt" TIMESTAMP(3),
     "passwordHash" TEXT,
     "defaultOrgId" TEXT,
@@ -83,6 +84,7 @@ CREATE TABLE "Organization" (
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "ownerId" TEXT NOT NULL,
+    "companyEmail" TEXT,
     "website" TEXT,
     "logo" TEXT,
     "domain" TEXT,
@@ -94,6 +96,16 @@ CREATE TABLE "Organization" (
     "description" TEXT,
     "planTier" "PlanTier" NOT NULL DEFAULT 'FREEMIUM',
     "planSlug" TEXT NOT NULL DEFAULT 'free',
+    "subscriptionStatus" "SubscriptionStatus" NOT NULL DEFAULT 'TRIALING',
+    "billingCycle" "BillingCycle" NOT NULL DEFAULT 'MONTHLY',
+    "renewsOn" TIMESTAMP(3),
+    "startsOn" TIMESTAMP(3),
+    "endsOn" TIMESTAMP(3),
+    "provider" TEXT,
+    "externalCustomerId" TEXT,
+    "externalSubscriptionId" TEXT,
+    "paymentDetails" JSONB,
+    "status" "OrganizationStatus" NOT NULL DEFAULT 'PENDING',
     "seatLimit" INTEGER NOT NULL DEFAULT 1,
     "resumeAllotment" INTEGER NOT NULL DEFAULT 10,
     "creditsBalance" INTEGER NOT NULL DEFAULT 0,
@@ -103,21 +115,6 @@ CREATE TABLE "Organization" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Organization_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Membership" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "organizationId" TEXT NOT NULL,
-    "role" "UserRole" NOT NULL,
-    "status" "MembershipStatus" NOT NULL DEFAULT 'ACTIVE',
-    "invitedById" TEXT,
-    "lastActiveAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Membership_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -133,28 +130,6 @@ CREATE TABLE "Invitation" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Invitation_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "OrganizationSubscription" (
-    "id" TEXT NOT NULL,
-    "organizationId" TEXT NOT NULL,
-    "plan" "PlanTier" NOT NULL,
-    "planSlug" TEXT NOT NULL,
-    "status" "SubscriptionStatus" NOT NULL DEFAULT 'TRIALING',
-    "billingCycle" "BillingCycle" NOT NULL DEFAULT 'MONTHLY',
-    "seats" INTEGER NOT NULL,
-    "resumesIncluded" INTEGER NOT NULL,
-    "renewsOn" TIMESTAMP(3),
-    "startsOn" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endsOn" TIMESTAMP(3),
-    "provider" TEXT,
-    "externalCustomerId" TEXT,
-    "externalSubscriptionId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "OrganizationSubscription_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -195,6 +170,7 @@ CREATE TABLE "PricingPlan" (
     "ocr" TEXT NOT NULL DEFAULT 'No',
     "semanticSearch" BOOLEAN NOT NULL DEFAULT false,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "creditBundles" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -251,19 +227,6 @@ CREATE TABLE "Job" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Job_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "JobOption" (
-    "id" TEXT NOT NULL,
-    "category" "JobOptionCategory" NOT NULL,
-    "value" TEXT NOT NULL,
-    "label" TEXT,
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "JobOption_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -471,28 +434,6 @@ CREATE TABLE "AuditLog" (
 );
 
 -- CreateTable
-CREATE TABLE "Account" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "type" TEXT NOT NULL,
-    "provider" TEXT NOT NULL,
-    "providerAccountId" TEXT NOT NULL,
-    "refresh_token" TEXT,
-    "access_token" TEXT,
-    "expires_at" INTEGER,
-    "token_type" TEXT,
-    "scope" TEXT,
-    "id_token" TEXT,
-    "session_state" TEXT,
-    "oauth_token_secret" TEXT,
-    "oauth_token" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "Session" (
     "id" TEXT NOT NULL,
     "sessionToken" TEXT NOT NULL,
@@ -527,22 +468,10 @@ CREATE INDEX "Organization_planTier_idx" ON "Organization"("planTier");
 CREATE INDEX "Organization_planSlug_idx" ON "Organization"("planSlug");
 
 -- CreateIndex
-CREATE INDEX "Membership_organizationId_role_idx" ON "Membership"("organizationId", "role");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Membership_userId_organizationId_key" ON "Membership"("userId", "organizationId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "Invitation_token_key" ON "Invitation"("token");
 
 -- CreateIndex
 CREATE INDEX "Invitation_organizationId_email_idx" ON "Invitation"("organizationId", "email");
-
--- CreateIndex
-CREATE INDEX "OrganizationSubscription_organizationId_status_idx" ON "OrganizationSubscription"("organizationId", "status");
-
--- CreateIndex
-CREATE INDEX "OrganizationSubscription_planSlug_idx" ON "OrganizationSubscription"("planSlug");
 
 -- CreateIndex
 CREATE INDEX "CreditLedger_organizationId_createdAt_idx" ON "CreditLedger"("organizationId", "createdAt");
@@ -558,12 +487,6 @@ CREATE INDEX "Job_organizationId_status_idx" ON "Job"("organizationId", "status"
 
 -- CreateIndex
 CREATE INDEX "Job_organizationId_sortingState_idx" ON "Job"("organizationId", "sortingState");
-
--- CreateIndex
-CREATE INDEX "JobOption_category_sortOrder_idx" ON "JobOption"("category", "sortOrder");
-
--- CreateIndex
-CREATE UNIQUE INDEX "JobOption_category_value_key" ON "JobOption"("category", "value");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "JobEmbedding_jobId_key" ON "JobEmbedding"("jobId");
@@ -620,9 +543,6 @@ CREATE INDEX "AuditLog_organizationId_entityType_idx" ON "AuditLog"("organizatio
 CREATE INDEX "AuditLog_actorUserId_idx" ON "AuditLog"("actorUserId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Account_provider_providerAccountId_key" ON "Account"("provider", "providerAccountId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "Session_sessionToken_key" ON "Session"("sessionToken");
 
 -- CreateIndex
@@ -644,25 +564,10 @@ ALTER TABLE "Organization" ADD CONSTRAINT "Organization_createdById_fkey" FOREIG
 ALTER TABLE "Organization" ADD CONSTRAINT "Organization_planSlug_fkey" FOREIGN KEY ("planSlug") REFERENCES "PricingPlan"("slug") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Membership" ADD CONSTRAINT "Membership_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Membership" ADD CONSTRAINT "Membership_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Membership" ADD CONSTRAINT "Membership_invitedById_fkey" FOREIGN KEY ("invitedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_invitedById_fkey" FOREIGN KEY ("invitedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "OrganizationSubscription" ADD CONSTRAINT "OrganizationSubscription_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "OrganizationSubscription" ADD CONSTRAINT "OrganizationSubscription_planSlug_fkey" FOREIGN KEY ("planSlug") REFERENCES "PricingPlan"("slug") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CreditLedger" ADD CONSTRAINT "CreditLedger_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -776,8 +681,4 @@ ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_organizationId_fkey" FOREIGN KEY
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorUserId_fkey" FOREIGN KEY ("actorUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-

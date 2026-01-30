@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -27,12 +28,22 @@ type SelectedJob = {
 export default function UploadCandidatesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [mounted, setMounted] = useState(false);
   const {
     goToRoleDetailsStep,
     uploadedFiles,
+    cvFiles,
     handleUploadFiles,
+    handleDropFiles,
     handleZipUpload,
     zipFileName,
+    zipUploadError,
+    zipUploading,
+    uploadingCv,
+    uploadProgress,
+    uploadStatus,
+    uploadError,
+    startUploadQueue,
     driveLink,
     setDriveLink,
     topCandidates,
@@ -135,6 +146,29 @@ export default function UploadCandidatesPage() {
     router.push("/jobs/new");
   };
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const uploadOverlay =
+    (uploadingCv || zipUploading || uploadProgress > 0) && (
+      <div className="fixed bottom-6 right-6 z-[999] w-[320px] rounded-3xl border border-[#DCE0E0] bg-white/95 p-4 shadow-card-soft backdrop-blur">
+        <div className="flex items-center justify-between text-sm font-semibold text-[#181B31]">
+          <span>Uploading files</span>
+          <span className="text-xs text-[#4B5563]">{Math.round(uploadProgress)}%</span>
+        </div>
+        <p className="mt-1 text-xs text-[#4B5563]">
+          {uploadStatus || "Preparing upload..."}
+        </p>
+        <div className="mt-3 h-2 w-full rounded-full bg-[#E5E7EB]">
+          <div
+            className="h-2 rounded-full bg-[#3D64FF] transition-all"
+            style={{ width: `${Math.min(100, Math.max(0, uploadProgress))}%` }}
+          />
+        </div>
+      </div>
+    );
+
   return (
     <div className="space-y-8 text-[#181B31]">
       <section className="relative overflow-hidden rounded-4xl border border-[#DCE0E0]/80 bg-gradient-to-br from-[#FFFFFF] via-[#F2F4F8] to-[#FFFFFF] p-8 shadow-card-soft">
@@ -171,7 +205,7 @@ export default function UploadCandidatesPage() {
               <div className="flex items-center justify-between">
                 <span>CVs queued</span>
                 <span className="rounded-full bg-[#3D64FF]/15 px-3 py-1 text-xs font-semibold text-[#3D64FF]">
-                  {uploadedFiles.length || 47}
+                  {uploadedFiles.length + cvFiles.length + (zipFileName ? 1 : 0) || 47}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -328,7 +362,18 @@ export default function UploadCandidatesPage() {
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
-                <label className="group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-[#DCE0E0] bg-[#FFFFFF] p-8 text-center text-sm text-[#4B5563] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]">
+                <label
+                  className="group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-[#DCE0E0] bg-[#FFFFFF] p-8 text-center text-sm text-[#4B5563] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]"
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (event.dataTransfer.files?.length) {
+                      handleDropFiles(event.dataTransfer.files);
+                    }
+                  }}
+                >
                   <FileUp className="h-10 w-10 text-[#3D64FF]" />
                   <div>
                     <p className="text-base font-semibold text-[#181B31]">
@@ -353,14 +398,19 @@ export default function UploadCandidatesPage() {
                     Bundle a folder of CVs. We&apos;ll unpack and deduplicate
                     automatically.
                   </p>
-                  <label className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25">
+                  <label
+                    className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25 ${
+                      zipUploading ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                    }`}
+                  >
                     <UploadCloud className="h-4 w-4" />
-                    Choose ZIP
+                    {zipUploading ? 'Uploading...' : 'Choose ZIP'}
                     <input
                       type="file"
                       accept=".zip"
                       className="hidden"
                       onChange={handleZipUpload}
+                      disabled={zipUploading}
                     />
                   </label>
                   {zipFileName && (
@@ -368,8 +418,61 @@ export default function UploadCandidatesPage() {
                       {zipFileName}
                     </p>
                   )}
+                  {zipUploadError && (
+                    <p className="mt-3 rounded-2xl border border-[#FECACA] bg-[#FFF1F2] px-3 py-2 text-xs font-medium text-[#B42318]">
+                      {zipUploadError}
+                    </p>
+                  )}
                 </div>
               </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs font-medium text-[#B42318]">{uploadError}</div>
+                <button
+                  type="button"
+                  onClick={() => startUploadQueue(selectedJob?.id ?? jobId)}
+                  disabled={
+                    uploadingCv ||
+                    zipUploading ||
+                    (!cvFiles.length && !zipFileName) ||
+                    !(selectedJobId || jobId)
+                  }
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                    uploadingCv || zipUploading || (!cvFiles.length && !zipFileName)
+                      ? 'cursor-not-allowed bg-[#DCE0E0] text-[#8A94A6]'
+                      : 'bg-[#3D64FF] text-white shadow-sm hover:bg-[#2F53D6]'
+                  }`}
+                >
+                  {uploadingCv || zipUploading ? (
+                    <>
+                      <UploadCloud className="h-4 w-4" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="h-4 w-4" />
+                      Upload selected
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {(cvFiles.length > 0 || zipFileName) && (
+                <div className="rounded-2xl border border-[#DCE0E0] bg-[#F8FAFF] p-4 text-xs text-[#4B5563]">
+                  <p className="mb-2 font-semibold text-[#181B31]">Pending uploads</p>
+                  <ul className="space-y-1">
+                    {cvFiles.map((file) => (
+                      <li key={file.name} className="flex justify-between">
+                        <span>{file.name}</span>
+                        <span className="text-[11px] text-[#8A94A6]">
+                          {(file.size / 1024 / 1024).toFixed(1)} MB
+                        </span>
+                      </li>
+                    ))}
+                    {zipFileName && <li className="font-medium text-[#3D64FF]">{zipFileName}</li>}
+                  </ul>
+                </div>
+              )}
 
               <div className="rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-5 text-sm text-[#4B5563]">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
@@ -489,6 +592,7 @@ export default function UploadCandidatesPage() {
           </div>
         </div>
       </div>
+      {mounted && uploadOverlay ? createPortal(uploadOverlay, document.body) : null}
     </div>
   );
 }

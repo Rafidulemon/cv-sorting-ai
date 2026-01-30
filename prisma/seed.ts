@@ -174,29 +174,6 @@ async function main() {
     });
   }
 
-  for (const candidate of candidateSeeds) {
-    await prisma.candidate.upsert({
-      where: { id: candidate.id },
-      update: {
-        fullName: candidate.fullName,
-        phone: candidate.phone,
-        location: candidate.location,
-        headline: candidate.headline,
-        source: candidate.source,
-        currentCompany: candidate.currentCompany,
-        currentTitle: candidate.currentTitle,
-        linkedinUrl: candidate.linkedinUrl,
-        githubUrl: candidate.githubUrl,
-        portfolioUrl: candidate.portfolioUrl,
-        yearsExperience: candidate.yearsExperience,
-        tags: candidate.tags,
-      },
-      create: {
-        ...candidate,
-      },
-    });
-  }
-
   for (const org of orgs) {
     const planDetails = planDefaultsBySlug[org.planSlug] ?? planDefaultsBySlug.standard;
     const seatLimit = planDetails?.seatLimit ?? org.seatLimit;
@@ -284,6 +261,29 @@ async function main() {
         role: user.role,
         profileStatus: MembershipStatus.ACTIVE,
         lastLoginAt: new Date(),
+      },
+    });
+  }
+
+  for (const candidate of candidateSeeds) {
+    await prisma.candidate.upsert({
+      where: { id: candidate.id },
+      update: {
+        fullName: candidate.fullName,
+        phone: candidate.phone,
+        location: candidate.location,
+        headline: candidate.headline,
+        source: candidate.source,
+        currentCompany: candidate.currentCompany,
+        currentTitle: candidate.currentTitle,
+        linkedinUrl: candidate.linkedinUrl,
+        githubUrl: candidate.githubUrl,
+        portfolioUrl: candidate.portfolioUrl,
+        yearsExperience: candidate.yearsExperience,
+        tags: candidate.tags,
+      },
+      create: {
+        ...candidate,
       },
     });
   }

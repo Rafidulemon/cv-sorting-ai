@@ -17,6 +17,7 @@ const profileSelect = {
   team: true,
   timezone: true,
   profileStatus: true,
+  connectedEmail: true,
   startedAt: true,
   lastLoginAt: true,
   createdAt: true,

@@ -43,6 +43,7 @@ type Profile = {
   designation: string;
   team: string;
   email: string;
+  connectedEmail?: string;
   phone: string;
   timezone: string;
   status: string;
@@ -351,6 +352,7 @@ export default function ProfilePage() {
     designation: "",
     team: "",
     email: session?.user?.email ?? "",
+    connectedEmail: "",
     phone: "",
     timezone: "",
     status: "",
@@ -410,6 +412,7 @@ export default function ProfilePage() {
           designation: user.designation ?? prev.designation,
           team: user.team ?? prev.team,
           email: user.email ?? prev.email,
+          connectedEmail: (user as any).connectedEmail ?? prev.connectedEmail,
           phone: user.phone ?? prev.phone,
           timezone: user.timezone ?? prev.timezone,
           status: user.profileStatus ?? prev.status,
@@ -470,6 +473,7 @@ export default function ProfilePage() {
     { label: "Full name", value: profile.name },
     { label: "Designation", value: profile.designation },
     { label: "Team", value: profile.team },
+    { label: "Connected Email", value: profile.connectedEmail || "Not connected", icon: Mail },
   ];
 
   const contactDetails = [

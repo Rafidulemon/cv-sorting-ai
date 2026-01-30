@@ -70,7 +70,15 @@ function useJobCreationState() {
   const [jdProcessingError, setJdProcessingError] = useState('');
 
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [cvFiles, setCvFiles] = useState<File[]>([]);
+  const [zipFile, setZipFile] = useState<File | null>(null);
   const [zipFileName, setZipFileName] = useState<string | null>(null);
+  const [zipUploadError, setZipUploadError] = useState('');
+  const [zipUploading, setZipUploading] = useState(false);
+  const [uploadingCv, setUploadingCv] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [uploadError, setUploadError] = useState('');
   const [driveLink, setDriveLink] = useState('');
   const [topCandidates, setTopCandidates] = useState(25);
 
@@ -118,9 +126,9 @@ function useJobCreationState() {
   );
 
   const costUsage = useMemo(() => {
-    const base = uploadedFiles.length || 47;
+    const base = uploadedFiles.length + cvFiles.length + (zipFile ? 1 : 0) || 47;
     return { consumed: base, total: 500 };
-  }, [uploadedFiles.length]);
+  }, [uploadedFiles.length, cvFiles.length, zipFile]);
 
   const resetUploadedFile = () => {
     setUploadedJdFileName(null);
@@ -559,20 +567,154 @@ function useJobCreationState() {
     }
   };
 
+  const addCvFiles = (files: File[]) => {
+    if (!files.length) return;
+    setCvFiles((prev) => [...prev, ...files]);
+    setUploadError('');
+  };
+
   const handleUploadFiles = (event: ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files) return;
-    const names = Array.from(event.target.files).map((file) => file.name);
-    setUploadedFiles((prev) => [...prev, ...names]);
+    addCvFiles(Array.from(event.target.files));
+    if (event.target) event.target.value = '';
+  };
+
+  const handleDropFiles = (files: FileList) => {
+    addCvFiles(Array.from(files));
   };
 
   const handleZipUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setZipFileName(file.name);
+    const file = event.target.files?.[0] ?? null;
+    setZipFile(file);
+    setZipFileName(file?.name ?? null);
+    setZipUploadError('');
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
+
+  const uploadWithProgress = (
+    url: string,
+    formData: FormData,
+    size: number,
+    onProgress: (loaded: number, total: number) => void
+  ) =>
+    new Promise<Record<string, unknown>>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          onProgress(event.loaded, size || event.total || size);
+        }
+      };
+      xhr.onload = () => {
+        const status = xhr.status;
+        let payload: Record<string, unknown> = {};
+        try {
+          payload = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        } catch {
+          // ignore parse errors
+        }
+        if (status >= 200 && status < 300) {
+          resolve(payload);
+        } else {
+          reject(new Error((payload as { error?: string })?.error || `Upload failed with status ${status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.send(formData);
+    });
+
+  const startUploadQueue = async (jobIdOverride?: string | null) => {
+    if (uploadingCv) return;
+    setUploadError('');
+    const effectiveJobId = jobIdOverride ?? jobId;
+    if (!effectiveJobId) {
+      setUploadError('Select or save a job first.');
+      return;
+    }
+    if (!cvFiles.length && !zipFile) {
+      setUploadError('Add CV files or a ZIP to upload.');
+      return;
+    }
+
+    const totalBytes =
+      cvFiles.reduce((sum, file) => sum + file.size, 0) + (zipFile ? zipFile.size : 0);
+    if (!totalBytes) {
+      setUploadError('Nothing to upload.');
+      return;
+    }
+
+    setUploadingCv(true);
+    setUploadProgress(1);
+    setUploadStatus('Starting uploads...');
+
+    let completedBytes = 0;
+    const uploadedNames: string[] = [];
+
+    try {
+      for (const file of cvFiles) {
+        setUploadStatus(`Uploading ${file.name}`);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('jobId', effectiveJobId);
+
+        await uploadWithProgress('/api/jobs/upload-cv-file', formData, file.size, (loaded, _total) => {
+          setUploadProgress(Math.min(99, ((completedBytes + loaded) / totalBytes) * 100));
+        });
+
+        completedBytes += file.size;
+        uploadedNames.push(file.name);
+        setUploadProgress(Math.min(99, (completedBytes / totalBytes) * 100));
+      }
+
+      if (zipFile) {
+        if (zipFile.size > 75 * 1024 * 1024) {
+          throw new Error('ZIP must be 75MB or smaller.');
+        }
+        setUploadStatus(`Uploading ${zipFile.name}`);
+        setZipUploading(true);
+        const formData = new FormData();
+        formData.append('file', zipFile);
+        formData.append('jobId', effectiveJobId);
+
+        const payload = await uploadWithProgress('/api/jobs/upload-cv-zip', formData, zipFile.size, (loaded, _total) => {
+          setUploadProgress(Math.min(99, ((completedBytes + loaded) / totalBytes) * 100));
+        });
+
+        const names =
+          Array.isArray((payload as { files?: unknown[] })?.files) && (payload as { files: { name?: string; key?: string }[] }).files.length
+            ? (payload as { files: { name?: string; key?: string }[] }).files.map((item) => item.name || item.key || 'CV')
+            : [zipFile.name];
+
+        completedBytes += zipFile.size;
+        uploadedNames.push(...names);
+        setUploadProgress(Math.min(99, (completedBytes / totalBytes) * 100));
+        setZipUploading(false);
+      }
+
+      setUploadStatus('Finalizing...');
+      setUploadProgress(100);
+      setUploadedFiles((prev) => [...prev, ...uploadedNames]);
+      setCvFiles([]);
+      setZipFile(null);
+      setZipFileName(null);
+      showToast(`Uploaded ${uploadedNames.length} file${uploadedNames.length === 1 ? '' : 's'}`, 'success');
+    } catch (error) {
+      const message = (error as Error)?.message ?? 'Upload failed';
+      setUploadError(message);
+      setUploadStatus('Upload failed');
+      setZipUploading(false);
+      showToast(message, 'error');
+    } finally {
+      setUploadingCv(false);
+      setTimeout(() => setUploadProgress(0), 1200);
+    }
   };
 
   const handleRemoveFile = (fileName: string) => {
     setUploadedFiles((prev) => prev.filter((name) => name !== fileName));
+    setCvFiles((prev) => prev.filter((file) => file.name !== fileName));
   };
 
   useEffect(() => {
@@ -790,7 +932,14 @@ function useJobCreationState() {
     jdProcessingError,
     canProcessJd,
     uploadedFiles,
+    cvFiles,
     zipFileName,
+    zipUploadError,
+    zipUploading,
+    uploadingCv,
+    uploadProgress,
+    uploadStatus,
+    uploadError,
     driveLink,
     setDriveLink,
     topCandidates,
@@ -851,7 +1000,9 @@ function useJobCreationState() {
     handleJobDescriptionUpload,
     processJobDescription,
     handleUploadFiles,
+    handleDropFiles,
     handleZipUpload,
+    startUploadQueue,
     handleRemoveFile,
     handleCloseOverlay,
     handleSaveDraft,

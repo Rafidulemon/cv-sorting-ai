@@ -149,6 +149,7 @@ model User {
   team          String?
   timezone      String?
   profileStatus MembershipStatus?
+  connectedEmail String?
   role          UserRole          @default(VIEWER)
   startedAt     DateTime?
   passwordHash  String?
