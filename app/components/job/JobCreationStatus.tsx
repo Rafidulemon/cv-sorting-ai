@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Loader2, Sparkles, X } from 'lucide-react';
 import { useJobCreation } from './JobCreationProvider';
 
@@ -17,20 +19,33 @@ export function JobCreationStatus() {
     handleConfirmRun,
     canStartSorting,
     createdJobId,
-    uploadedFiles,
+    uploadedResumes,
     topCandidates,
     costUsage,
+    sortingBackground,
+    openSortingOverlay,
+    runSortingInBackground,
   } = useJobCreation();
+
+  useEffect(() => {
+    if (showConfirmation) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+    return;
+  }, [showConfirmation]);
 
   if (!showConfirmation) {
     return null;
   }
 
-  return (
-    <>
-      {showConfirmation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#181B31]/60 px-4 backdrop-blur">
-          <div className="w-full max-w-xl overflow-hidden rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] shadow-card-soft">
+  const modal = showConfirmation
+    ? createPortal(
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/45 backdrop-blur-md px-4">
+          <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_25px_70px_-30px_rgba(0,0,0,0.65)]">
             {processingState === 'idle' && (
               <div className="space-y-6 p-8 text-[#181B31]">
                 <div className="flex items-start justify-between">
@@ -42,7 +57,7 @@ export function JobCreationStatus() {
                   </div>
                   <button
                     type="button"
-                    onClick={handleCloseOverlay}
+                    onClick={() => handleCloseOverlay()}
                     className="rounded-full border border-[#DCE0E0] p-2 text-[#8A94A6] transition hover:border-[#3D64FF]/40 hover:text-[#3D64FF]"
                   >
                     <X className="h-4 w-4" />
@@ -51,7 +66,7 @@ export function JobCreationStatus() {
                 <div className="space-y-4 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-5 text-sm text-[#4B5563]">
                   <div className="flex items-center justify-between">
                     <span>CVs queued</span>
-                    <span className="font-semibold text-[#181B31]">{uploadedFiles.length || 47}</span>
+                    <span className="font-semibold text-[#181B31]">{uploadedResumes.length || 0}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Top candidates requested</span>
@@ -67,7 +82,7 @@ export function JobCreationStatus() {
                 <div className="flex justify-end gap-3 text-xs font-semibold uppercase tracking-wide">
                   <button
                     type="button"
-                    onClick={handleCloseOverlay}
+                    onClick={() => handleCloseOverlay()}
                     className="rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]"
                   >
                     Cancel
@@ -107,6 +122,15 @@ export function JobCreationStatus() {
                     />
                   </div>
                   <p className="text-xs text-[#8A94A6]">Progress - {progress.toFixed(0)}%</p>
+                </div>
+                <div className="flex justify-end text-xs font-semibold uppercase tracking-wide">
+                  <button
+                    type="button"
+                    onClick={runSortingInBackground}
+                    className="rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]"
+                  >
+                    Run in background
+                  </button>
                 </div>
               </div>
             )}
@@ -160,14 +184,14 @@ export function JobCreationStatus() {
                 <div className="flex justify-end gap-3 text-xs font-semibold uppercase tracking-wide">
                   <button
                     type="button"
-                    onClick={handleCloseOverlay}
+                  onClick={() => handleCloseOverlay()}
                     className="rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-4 py-2 text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]"
                   >
                     Close
                   </button>
                   <Link
                     href="/jobs"
-                    onClick={handleCloseOverlay}
+                    onClick={() => handleCloseOverlay()}
                     className="inline-flex items-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-5 py-2 text-[#3D64FF] shadow-glow-primary transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
                   >
                     Go to jobs
@@ -177,9 +201,46 @@ export function JobCreationStatus() {
               </div>
             )}
           </div>
-        </div>
-      )}
+        </div>,
+        document.body,
+      )
+    : null;
 
+  const backgroundPanel =
+    sortingBackground && processingState === 'processing'
+      ? createPortal(
+        <div className="fixed bottom-6 right-6 z-[1050] w-[320px] rounded-3xl border border-[#E5E7EB] bg-white p-4 shadow-card-soft">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-[#181B31]">Sorting resumes</p>
+              <p className="text-[11px] text-[#6B7280]">Running in background</p>
+            </div>
+            <button
+              type="button"
+              onClick={openSortingOverlay}
+              className="rounded-full border border-[#DCE0E0] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/60 hover:bg-[#F0F2F8]"
+            >
+              View
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#E5E7EB]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#8A94A6] via-[#3D64FF]/70 to-[#3D64FF] transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+              />
+            </div>
+            <p className="text-xs text-[#6B7280]">Progress – {progress.toFixed(0)}%</p>
+          </div>
+        </div>,
+        document.body,
+      )
+      : null;
+
+  return (
+    <>
+      {modal}
+      {backgroundPanel}
     </>
   );
 }

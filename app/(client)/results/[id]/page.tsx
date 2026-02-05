@@ -17,7 +17,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Pagination } from '@/app/components/Pagination';
-import { candidateResults, requiredSkills, stageMeta, type CandidateResult } from '../data';
+import { stageMeta, type CandidateResult } from '../data';
 
 export default function ResultsPage() {
   const params = useParams<{ id: string | string[] }>();
@@ -25,11 +25,46 @@ export default function ResultsPage() {
   const jobId = Array.isArray(jobIdRaw) ? jobIdRaw[0] : jobIdRaw;
   const [sortBy, setSortBy] = useState<'score' | 'name'>('score');
   const [skillFilter, setSkillFilter] = useState('');
-  const [candidateRows, setCandidateRows] = useState<CandidateResult[]>(candidateResults);
+  const [candidateRows, setCandidateRows] = useState<CandidateResult[]>([]);
+  const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
+  const [shortlistSize, setShortlistSize] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [shortlistPage, setShortlistPage] = useState(1);
   const [holdPage, setHoldPage] = useState(1);
   const [rejectedPage, setRejectedPage] = useState(1);
   const pageSize = 4;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchResults = async () => {
+      if (!jobId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/results`, { signal: controller.signal });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `Request failed (${res.status})`);
+        }
+        const body = (await res.json()) as {
+          candidates: CandidateResult[];
+          requiredSkills?: string[];
+          shortlistSize?: number | null;
+        };
+        setCandidateRows(body.candidates ?? []);
+        setRequiredSkills(body.requiredSkills ?? []);
+        setShortlistSize(body.shortlistSize ?? null);
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchResults();
+    return () => controller.abort();
+  }, [jobId]);
 
   const shortlist = useMemo(() => {
     const filtered = skillFilter
@@ -75,7 +110,7 @@ export default function ResultsPage() {
 
   const topCandidate = shortlist[0];
   const averageCoverage =
-    shortlist.length === 0
+    shortlist.length === 0 || requiredSkills.length === 0
       ? null
       : Math.round(
           (shortlist.reduce((acc, candidate) => acc + candidate.skillGap.present.length, 0) /
@@ -83,13 +118,21 @@ export default function ResultsPage() {
             100,
         );
 
+  const shortlistedCount = shortlist.length;
+  const holdCount = hold.length;
+  const rejectedCount = rejected.length;
+
   const averageScore =
     shortlist.length === 0
       ? null
       : Math.round(shortlist.reduce((acc, candidate) => acc + candidate.matchScore, 0) / shortlist.length);
 
   const metrics = [
-    { label: 'CVs processed', value: candidateRows.length.toString(), helper: `${shortlist.length} shortlisted` },
+    {
+      label: 'CVs processed',
+      value: candidateRows.length.toString(),
+      helper: `${shortlistedCount} shortlisted`,
+    },
     {
       label: 'Avg. match score',
       value: averageScore !== null ? `${averageScore}%` : '--',
@@ -101,6 +144,18 @@ export default function ResultsPage() {
   const removeCandidate = (candidateId: string) => {
     setCandidateRows((prev) => prev.filter((candidate) => candidate.id !== candidateId));
   };
+
+  if (error) {
+    return (
+      <div className="space-y-6 rounded-3xl border border-[#FECACA] bg-[#FFF5F5] p-6 text-[#7F1D1D]">
+        <h1 className="text-xl font-semibold">Unable to load results</h1>
+        <p className="text-sm">{error}</p>
+        <Link href="/jobs" className="text-sm font-semibold text-[#3D64FF] underline">
+          Back to jobs
+        </Link>
+      </div>
+    );
+  }
 
   const renderTable = (
     title: string,
@@ -195,8 +250,11 @@ export default function ResultsPage() {
                 Results - {jobId ? decodeURIComponent(jobId) : 'Unknown job'}
               </h1>
               <p className="max-w-2xl text-sm text-[#4B5563] lg:text-base">
-                47 CVs analysed with semantic scoring, interview-readiness weighting, and bias safeguards. Refine the
-                shortlist or export the full audit trail.
+                {loading
+                  ? 'Loading ranked candidates...'
+                  : shortlistedCount
+                    ? `${shortlistedCount} shortlisted${holdCount ? ` · ${holdCount} on hold` : ''}.`
+                    : 'No shortlisted candidates yet. Once sorting completes, results will appear here.'}
               </p>
               <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-[#4B5563]">
                 <span className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-1.5 text-[#181B31]">

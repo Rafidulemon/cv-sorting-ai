@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { createHash, webcrypto } from "crypto";
-import { FileProvider, Prisma, CvProcessingStatus } from "@prisma/client";
+import { FileProvider, Prisma, CvProcessingStatus, JobStatus } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 
 export const runtime = "nodejs";
@@ -375,6 +375,7 @@ export async function POST(request: NextRequest) {
       data: {
         requirements: nextRequirements,
         lastActivityAt: new Date(),
+        status: JobStatus.ACTIVE,
       },
     });
 

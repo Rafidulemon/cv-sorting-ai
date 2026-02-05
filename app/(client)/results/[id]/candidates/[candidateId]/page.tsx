@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Mail, MessageSquare, Sparkles, Star } from 'lucide-react';
 import { AskCarriXModal } from '@/app/components/modals/AskCarriXModal';
 import { StageEmailModal } from '@/app/components/modals/StageEmailModal';
-import type { CandidateStage } from '../../../data';
-import { candidateResults, requiredSkills, stageMeta } from '../../../data';
+import type { CandidateResult, CandidateStage } from '../../../data';
+import { stageMeta } from '../../../data';
 
 export default function CandidateDetailPage() {
   const params = useParams<{ id: string | string[]; candidateId: string | string[] }>();
@@ -16,20 +16,50 @@ export default function CandidateDetailPage() {
   const jobId = Array.isArray(jobIdRaw) ? jobIdRaw[0] : jobIdRaw;
   const candidateId = Array.isArray(candidateIdRaw) ? candidateIdRaw[0] : candidateIdRaw;
 
-  const candidate = useMemo(
-    () => candidateResults.find((item) => item.id === candidateId),
-    [candidateId],
-  );
-  const [stage, setStage] = useState<CandidateStage>(candidate?.stage ?? 'shortlist');
+  const [candidate, setCandidate] = useState<CandidateResult | null>(null);
+  const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<CandidateStage>('shortlist');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [showAskModal, setShowAskModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchCandidate = async () => {
+      if (!jobId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/results`, { signal: controller.signal });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `Request failed (${res.status})`);
+        }
+        const body = (await res.json()) as { candidates: CandidateResult[]; requiredSkills?: string[] };
+        const found = body.candidates?.find((item) => item.id === candidateId) ?? null;
+        setCandidate(found);
+        setRequiredSkills(body.requiredSkills ?? []);
+        if (found) setStage(found.stage);
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCandidate();
+    return () => controller.abort();
+  }, [jobId, candidateId]);
+
   if (!candidate) {
     return (
       <div className="space-y-6 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-8 text-[#181B31] shadow-card-soft">
-        <p className="text-lg font-semibold">Candidate not found</p>
-        <p className="text-sm text-[#4B5563]">Return to the results page to pick another profile.</p>
+        <p className="text-lg font-semibold">{error ? 'Unable to load candidate' : 'Candidate not found'}</p>
+        <p className="text-sm text-[#4B5563]">
+          {error || 'Return to the results page to pick another profile.'}
+        </p>
         <Link
           href={`/results/${jobId ?? ''}`}
           className="inline-flex w-fit items-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"

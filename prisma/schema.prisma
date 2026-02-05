@@ -1,6 +1,7 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {
@@ -57,9 +58,8 @@ enum CreditLedgerType {
 enum JobStatus {
   DRAFT
   ACTIVE
-  REVIEWING
-  COMPLETED
-  ARCHIVED
+  SORTING
+  SORTED
 }
 
 enum SortingState {

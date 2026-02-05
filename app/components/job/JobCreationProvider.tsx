@@ -12,8 +12,27 @@ import {
   jobPromptSkippableKeys,
   type JobPromptFieldKey,
 } from '@/app/constants/jobCreation';
+import { useUploadOverlay } from '@/app/components/upload/UploadOverlayProvider';
 
 const JOB_DESCRIPTION_MAX_BYTES = 5 * 1024 * 1024;
+const RESUME_PROCESS_STORAGE_KEY = 'carrix-resume-processing';
+const SORTING_PROCESS_STORAGE_KEY = 'carrix-sorting';
+
+type ResumeProcessingSession = {
+  jobId: string;
+  total?: number;
+  background?: boolean;
+  lastProgress?: number;
+  timestamp?: number;
+};
+
+type SortingProcessingSession = {
+  jobId: string;
+  queueJobId?: string | null;
+  background?: boolean;
+  lastProgress?: number;
+  timestamp?: number;
+};
 
 const splitList = (value: string) =>
   value
@@ -45,6 +64,7 @@ type JobCreationContextValue = ReturnType<typeof useJobCreationState>;
 const JobCreationContext = createContext<JobCreationContextValue | null>(null);
 
 function useJobCreationState() {
+  const uploadOverlay = useUploadOverlay();
   const [mode, setMode] = useState<'create' | 'upload'>('create');
   const [aiStep, setAiStep] = useState(0);
   const [aiForm, setAiForm] = useState<Record<JobPromptFieldKey, string>>({
@@ -70,6 +90,9 @@ function useJobCreationState() {
   const [jdProcessingError, setJdProcessingError] = useState('');
 
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [uploadedResumes, setUploadedResumes] = useState<
+    { name: string; status: string; resumeId?: string | null }[]
+  >([]);
   const [cvFiles, setCvFiles] = useState<File[]>([]);
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [zipFileName, setZipFileName] = useState<string | null>(null);
@@ -81,6 +104,8 @@ function useJobCreationState() {
   const [uploadError, setUploadError] = useState('');
   const [driveLink, setDriveLink] = useState('');
   const [topCandidates, setTopCandidates] = useState(25);
+  const [refreshingResumes, setRefreshingResumes] = useState(false);
+  const [activeQueueJobId, setActiveQueueJobId] = useState<string | null>(null);
 
   const [employmentType, setEmploymentType] = useState<string>('');
   const [locationsInput, setLocationsInput] = useState('');
@@ -102,6 +127,17 @@ function useJobCreationState() {
   const [progress, setProgress] = useState(0);
   const [submitError, setSubmitError] = useState('');
   const [createdJobId, setCreatedJobId] = useState<string | null>(null);
+  const [resumeProcessModalOpen, setResumeProcessModalOpen] = useState(false);
+  const [resumeProcessingState, setResumeProcessingState] = useState<'idle' | 'confirm' | 'processing' | 'complete' | 'error'>('idle');
+  const [resumeProcessProgress, setResumeProcessProgress] = useState(0);
+  const [resumeProcessError, setResumeProcessError] = useState('');
+  const [resumeProcessCount, setResumeProcessCount] = useState(0);
+  const [resumeProcessBackground, setResumeProcessBackground] = useState(false);
+  const resumeProcessPollRef = useRef<NodeJS.Timeout | null>(null);
+  const [sortingQueueJobId, setSortingQueueJobId] = useState<string | null>(null);
+  const [sortingBackground, setSortingBackground] = useState(false);
+  const sortingPollRef = useRef<NodeJS.Timeout | null>(null);
+  const sortingBackgroundRef = useRef(false);
   const [errors, setErrors] = useState<Record<JobPromptFieldKey, string>>({
     title: '',
     responsibilities: '',
@@ -126,9 +162,19 @@ function useJobCreationState() {
   );
 
   const costUsage = useMemo(() => {
-    const base = uploadedFiles.length + cvFiles.length + (zipFile ? 1 : 0) || 47;
-    return { consumed: base, total: 500 };
-  }, [uploadedFiles.length, cvFiles.length, zipFile]);
+    const base = uploadedResumes.length;
+    return { consumed: base, total: Math.max(500, base) };
+  }, [uploadedResumes.length]);
+
+  const processedResumeCount = useMemo(
+    () => uploadedResumes.filter((row) => row.status === 'COMPLETED').length,
+    [uploadedResumes],
+  );
+
+  const notProcessedCount = useMemo(
+    () => uploadedResumes.filter((row) => row.status !== 'COMPLETED').length,
+    [uploadedResumes],
+  );
 
   const resetUploadedFile = () => {
     setUploadedJdFileName(null);
@@ -157,6 +203,34 @@ function useJobCreationState() {
     void message;
     void type;
   };
+
+  const fetchResumesForJob = useCallback(
+    async (targetJobId: string) => {
+      if (!targetJobId) return;
+      try {
+        setRefreshingResumes(true);
+        const response = await fetch(`/api/jobs/${targetJobId}/resumes`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const rows: { name: string; status: string; resumeId?: string | null }[] = Array.isArray(payload?.files)
+          ? (payload.files as { name?: string; status?: string; resumeId?: string | null }[])
+              .map((item) => ({
+                name: (item?.name as string | undefined)?.trim() || 'Resume',
+                status: (item?.status as string | undefined) || 'UPLOADED',
+                resumeId: (item?.resumeId as string | undefined) ?? null,
+              }))
+              .filter((row: { name: string }) => row.name)
+          : [];
+        setUploadedResumes(rows);
+        setUploadedFiles(rows.map((row) => row.name));
+      } catch (error) {
+        console.warn('Failed to refresh resumes', error);
+      } finally {
+        setRefreshingResumes(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -192,6 +266,26 @@ function useJobCreationState() {
     }
   }, [aiForm.experienceLevel, experienceOptions]);
 
+  useEffect(() => {
+    if (jobId) {
+      fetchResumesForJob(jobId);
+    }
+  }, [jobId, fetchResumesForJob]);
+
+  useEffect(() => {
+    if (!processedResumeCount) {
+      setTopCandidates(0);
+      return;
+    }
+    if (topCandidates === 0) {
+      setTopCandidates(Math.min(10, processedResumeCount));
+      return;
+    }
+    if (topCandidates > processedResumeCount) {
+      setTopCandidates(processedResumeCount);
+    }
+  }, [processedResumeCount, topCandidates]);
+
   const previewText = useMemo(() => {
     if (mode === 'create') {
       return generatedJD.trim();
@@ -225,9 +319,9 @@ function useJobCreationState() {
 
   const canStartSorting = useMemo(() => {
     if (!titleReady) return false;
-    if (mode === 'upload') return Boolean(uploadedJdFileName || uploadedJdText.trim());
+    if (mode === 'upload') return Boolean(uploadedJdFileName || uploadedJdText.trim() || jobId);
     return requiredFieldsValid;
-  }, [mode, requiredFieldsValid, titleReady, uploadedJdFileName, uploadedJdText]);
+  }, [mode, requiredFieldsValid, titleReady, uploadedJdFileName, uploadedJdText, jobId]);
 
   const canSaveDraft = useMemo(() => {
     if (!titleReady) return false;
@@ -625,135 +719,99 @@ function useJobCreationState() {
       xhr.send(formData);
     });
 
-  const startUploadQueue = async (jobIdOverride?: string | null) => {
-    if (uploadingCv) return;
-    setUploadError('');
-    const effectiveJobId = jobIdOverride ?? jobId;
-    if (!effectiveJobId) {
-      setUploadError('Select or save a job first.');
-      return;
-    }
-    if (!cvFiles.length && !zipFile) {
-      setUploadError('Add CV files or a ZIP to upload.');
-      return;
-    }
-
-    const totalBytes =
-      cvFiles.reduce((sum, file) => sum + file.size, 0) + (zipFile ? zipFile.size : 0);
-    if (!totalBytes) {
-      setUploadError('Nothing to upload.');
-      return;
-    }
-
-    setUploadingCv(true);
-    setUploadProgress(1);
-    setUploadStatus('Starting uploads...');
-
-    let completedBytes = 0;
-    const uploadedNames: string[] = [];
-
-    try {
-      for (const file of cvFiles) {
-        setUploadStatus(`Uploading ${file.name}`);
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('jobId', effectiveJobId);
-
-        await uploadWithProgress('/api/jobs/upload-cv-file', formData, file.size, (loaded, _total) => {
-          setUploadProgress(Math.min(99, ((completedBytes + loaded) / totalBytes) * 100));
-        });
-
-        completedBytes += file.size;
-        uploadedNames.push(file.name);
-        setUploadProgress(Math.min(99, (completedBytes / totalBytes) * 100));
-      }
-
-      if (zipFile) {
-        if (zipFile.size > 75 * 1024 * 1024) {
-          throw new Error('ZIP must be 75MB or smaller.');
-        }
-        setUploadStatus(`Uploading ${zipFile.name}`);
-        setZipUploading(true);
-        const formData = new FormData();
-        formData.append('file', zipFile);
-        formData.append('jobId', effectiveJobId);
-
-        const payload = await uploadWithProgress('/api/jobs/upload-cv-zip', formData, zipFile.size, (loaded, _total) => {
-          setUploadProgress(Math.min(99, ((completedBytes + loaded) / totalBytes) * 100));
-        });
-
-        const names =
-          Array.isArray((payload as { files?: unknown[] })?.files) && (payload as { files: { name?: string; key?: string }[] }).files.length
-            ? (payload as { files: { name?: string; key?: string }[] }).files.map((item) => item.name || item.key || 'CV')
-            : [zipFile.name];
-
-        completedBytes += zipFile.size;
-        uploadedNames.push(...names);
-        setUploadProgress(Math.min(99, (completedBytes / totalBytes) * 100));
-        setZipUploading(false);
-      }
-
-      setUploadStatus('Finalizing...');
-      setUploadProgress(100);
-      setUploadedFiles((prev) => [...prev, ...uploadedNames]);
-      setCvFiles([]);
-      setZipFile(null);
-      setZipFileName(null);
-      showToast(`Uploaded ${uploadedNames.length} file${uploadedNames.length === 1 ? '' : 's'}`, 'success');
-    } catch (error) {
-      const message = (error as Error)?.message ?? 'Upload failed';
-      setUploadError(message);
-      setUploadStatus('Upload failed');
-      setZipUploading(false);
-      showToast(message, 'error');
-    } finally {
-      setUploadingCv(false);
-      setTimeout(() => setUploadProgress(0), 1200);
-    }
-  };
-
   const handleRemoveFile = (fileName: string) => {
     setUploadedFiles((prev) => prev.filter((name) => name !== fileName));
     setCvFiles((prev) => prev.filter((file) => file.name !== fileName));
   };
 
-  useEffect(() => {
-    if (processingState !== 'processing') return;
-
-    const duration = 6000;
-    const start = performance.now();
-    let frameId = requestAnimationFrame(step);
-
-    function step(now: number) {
-      const elapsed = now - start;
-      const next = Math.min(100, (elapsed / duration) * 100);
-      setProgress(next);
-
-      if (elapsed >= duration) {
-        setProgress(100);
-        setProcessingState('complete');
-        return;
+  const pollQueueJob = useCallback(
+    async (queueJobId: string, targetJobId: string) => {
+      if (!queueJobId || !targetJobId) return;
+      let attempts = 0;
+      let done = false;
+      const maxAttempts = 30; // ~60s with 2s delay
+      while (!done && attempts < maxAttempts) {
+        attempts += 1;
+        try {
+          const response = await fetch(`/api/jobs/upload-cv-zip/status?queueJobId=${queueJobId}`, { cache: 'no-store' });
+          if (!response.ok) throw new Error('Failed to poll queue job');
+          const payload = await response.json();
+          const status = payload?.status as string | undefined;
+          const result = payload?.result as { uploaded?: number; failed?: number } | undefined;
+          if (status === 'COMPLETED') {
+            await fetchResumesForJob(targetJobId);
+            done = true;
+            setActiveQueueJobId(null);
+            uploadOverlay.markSuccess(
+              'Upload complete',
+              result?.failed ? `${result.uploaded ?? 0} uploaded, ${result.failed} failed` : undefined,
+            );
+            break;
+          }
+          if (status === 'FAILED') {
+            await fetchResumesForJob(targetJobId);
+            uploadOverlay.markError('Upload failed', result?.failed ? `${result.failed} failed` : undefined);
+            setActiveQueueJobId(null);
+            done = true;
+            break;
+          }
+        } catch (error) {
+          console.warn('Queue poll error', error);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      frameId = requestAnimationFrame(step);
-    }
+      if (!done) {
+        setActiveQueueJobId(null);
+        uploadOverlay.markError('Upload timed out', 'Worker did not pick up the job. Check worker logs and retry.');
+      }
+    },
+    [fetchResumesForJob, uploadOverlay]
+  );
 
-    return () => cancelAnimationFrame(frameId);
-  }, [processingState]);
-
-  const handleCloseOverlay = () => {
+  const resetSortingUi = () => {
+    stopSortingPoll();
+    clearSortingSession();
     setShowConfirmation(false);
     setProcessingState('idle');
     setProgress(0);
     setSubmitError('');
     setCreatedJobId(null);
+    setSortingQueueJobId(null);
+    setSortingBackground(false);
+  };
+
+  const handleCloseOverlay = (forceReset = false) => {
+    if (processingState === 'processing' && !forceReset) {
+      setShowConfirmation(false);
+      setSortingBackground(true);
+      if (jobId) {
+        updateSortingSession({
+          jobId,
+          queueJobId: sortingQueueJobId ?? undefined,
+          background: true,
+          lastProgress: progress || 0,
+          timestamp: Date.now(),
+        });
+      }
+      return;
+    }
+    resetSortingUi();
   };
 
   const createJobInDb = async (previewOverride?: string, descriptionOverride?: string) => {
     const title = aiForm.title.trim();
-    const preview = (previewOverride ?? previewText).trim();
+    let preview = (previewOverride ?? previewText).trim();
     const responsibilities = splitList(aiForm.responsibilities);
     const skills = splitList(aiForm.skills);
+
+    if (!preview.length) {
+      const fallback = uploadedJdText.trim() || jdTextForProcessing || buildJDTemplate();
+      preview = fallback.trim();
+      if (mode === 'create' && !generatedJD && fallback) {
+        setGeneratedJD(fallback);
+      }
+    }
 
     if (!title || !preview) {
       throw new Error('Add a job title and preview before saving.');
@@ -774,14 +832,14 @@ function useJobCreationState() {
       body: JSON.stringify({
         id: jobId ?? undefined,
         title,
-        description: descriptionOverride ?? (mode === 'create' ? generatedJD || preview : previewText),
+        description: (descriptionOverride ?? (mode === 'create' ? generatedJD || preview : previewText) ?? preview).trim(),
         previewText: preview,
         responsibilities,
         skills,
         experienceLevel: aiForm.experienceLevel,
         companyCulture: aiForm.companyCulture,
         source: mode === 'create' ? 'create' : 'upload',
-        topCandidates,
+        topCandidates: topCandidates > 0 ? topCandidates : undefined,
         driveLink: trimmedDriveLink || undefined,
         uploadedDescriptionFile: uploadedJdFileKey ?? uploadedJdFileUrl ?? uploadedJdFileName ?? undefined,
         employmentType: employmentType || undefined,
@@ -831,6 +889,19 @@ function useJobCreationState() {
           preview = template;
           description = template;
         }
+      } else {
+        // Upload mode: if preview missing, fall back to pasted/uploaded text or template
+        if (!preview.length) {
+          const fallback = uploadedJdText.trim() || jdTextForProcessing || buildJDTemplate();
+          if (!fallback) {
+            throw new Error('Add a job title and description before saving.');
+          }
+          preview = fallback;
+          description = fallback;
+          if (!generatedJD) {
+            setGeneratedJD(fallback);
+          }
+        }
       }
 
       if (!preview) {
@@ -852,12 +923,25 @@ function useJobCreationState() {
   const handleConfirmRun = async () => {
     setSubmitError('');
     setCreatedJobId(null);
-    setProgress(10);
+    setProgress(5);
     setProcessingState('processing');
+    setSortingBackground(false);
+    clearSortingSession();
+    stopSortingPoll();
 
-    try {
+  try {
       let preview = previewText.trim();
       let description = mode === 'upload' ? preview : generatedJD;
+
+      // Build missing preview/description from available sources
+      if (!preview.length) {
+        const fallback = uploadedJdText.trim() || jdTextForProcessing || buildJDTemplate();
+        preview = fallback.trim();
+        if (!description) description = fallback;
+        if (mode === 'create' && !generatedJD && fallback) {
+          setGeneratedJD(fallback);
+        }
+      }
 
       if (mode === 'create' && !preview) {
         const allValid = jobPromptRequiredKeys.every((key) => validateField(key, aiForm[key]));
@@ -879,13 +963,580 @@ function useJobCreationState() {
       if (nextJobId) {
         setJobId(nextJobId);
       }
-      setProgress(100);
-      setProcessingState('complete');
+      if (!nextJobId) {
+        throw new Error('Failed to create job before sorting.');
+      }
+
+      setProgress(35);
+      updateSortingSession({
+        jobId: nextJobId,
+        background: false,
+        lastProgress: 35,
+        timestamp: Date.now(),
+      });
+
+      const response = await fetch(`/api/jobs/${nextJobId}/sort`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topCandidates }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const message = payload?.error ?? response.statusText ?? 'Failed to start sorting';
+        throw new Error(message);
+      }
+
+      setProgress(55);
+      const queueJobId = (payload?.queueJobId as string | undefined) ?? null;
+      setSortingQueueJobId(queueJobId);
+      updateSortingSession({
+        jobId: nextJobId,
+        queueJobId,
+        background: sortingBackgroundRef.current,
+        lastProgress: 55,
+        timestamp: Date.now(),
+      });
+      pollSortingStatus(nextJobId, queueJobId);
     } catch (error) {
       setSubmitError((error as Error)?.message ?? 'Failed to create job');
       setProcessingState('error');
+      stopSortingPoll();
+      clearSortingSession();
     }
   };
+
+  const startUploadQueue = async (jobIdOverride?: string | null) => {
+    if (uploadingCv) return;
+    setUploadError('');
+    const totalFileCount = cvFiles.length + (zipFile ? 1 : 0);
+    const sourceKey = `${jobIdOverride ?? jobId ?? 'no-job'}-${totalFileCount}-${zipFileName ?? 'no-zip'}`;
+    uploadOverlay.showUpload(totalFileCount ? `Uploading ${totalFileCount} file${totalFileCount === 1 ? '' : 's'}` : 'Uploading files');
+    uploadOverlay.updateProgress(1, undefined);
+
+    let effectiveJobId = jobIdOverride ?? jobId;
+
+    if (!effectiveJobId) {
+      // Try to create a job automatically so uploads can proceed.
+      try {
+        let preview = previewText.trim();
+        let description = mode === 'create' ? generatedJD || preview : preview;
+
+        // Auto-build a minimal JD if user filled fields but hasn't generated one yet
+        if (mode === 'create' && (!preview.length || !description)) {
+          const template = buildJDTemplate();
+          setGeneratedJD(template);
+          preview = template;
+          description = template;
+        }
+
+        if (!aiForm.title.trim() || !preview.length) {
+          throw new Error('Add a job title and description before uploading.');
+        }
+
+        const createdId = await createJobInDb(preview, description || undefined);
+        if (!createdId) {
+          throw new Error('Failed to create job before upload.');
+        }
+        setJobId(createdId);
+        effectiveJobId = createdId;
+      } catch (error) {
+        const message = (error as Error)?.message ?? 'Select or save a job first.';
+        setUploadError(message);
+        uploadOverlay.markError('Upload failed', message);
+        return;
+      }
+    }
+
+    if (!cvFiles.length && !zipFile) {
+      setUploadError('Add CV files or a ZIP to upload.');
+      uploadOverlay.markError('Upload failed', 'Add CV files or a ZIP to upload.');
+      return;
+    }
+
+    const totalBytes =
+      cvFiles.reduce((sum, file) => sum + file.size, 0) + (zipFile ? zipFile.size : 0);
+    if (!totalBytes) {
+      setUploadError('Nothing to upload.');
+      return;
+    }
+
+    setUploadingCv(true);
+    setUploadProgress(1);
+    setUploadStatus('Starting uploads...');
+
+    let completedBytes = 0;
+    const uploadedNames: string[] = [];
+
+    let queuedZip = false;
+    try {
+      for (const file of cvFiles) {
+        setUploadStatus(`Uploading ${file.name}`);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('jobId', effectiveJobId);
+
+        await uploadWithProgress('/api/jobs/upload-cv-file', formData, file.size, (loaded, _total) => {
+          const percent = Math.min(99, ((completedBytes + loaded) / totalBytes) * 100);
+          setUploadProgress(percent);
+          uploadOverlay.updateProgress(percent, `Uploading ${file.name}`);
+        });
+
+        completedBytes += file.size;
+        uploadedNames.push(file.name);
+        setUploadProgress(Math.min(99, (completedBytes / totalBytes) * 100));
+        uploadOverlay.updateProgress(Math.min(99, (completedBytes / totalBytes) * 100));
+      }
+
+      if (zipFile) {
+        if (zipFile.size > 75 * 1024 * 1024) {
+          throw new Error('ZIP must be 75MB or smaller.');
+        }
+        setUploadStatus(`Uploading ${zipFile.name}`);
+        setZipUploading(true);
+        const formData = new FormData();
+        formData.append('file', zipFile);
+        formData.append('jobId', effectiveJobId);
+
+        const payload = await uploadWithProgress('/api/jobs/upload-cv-zip', formData, zipFile.size, (loaded, _total) => {
+          const percent = Math.min(99, ((completedBytes + loaded) / totalBytes) * 100);
+          setUploadProgress(percent);
+          uploadOverlay.updateProgress(percent, `Uploading ${zipFile.name}`);
+        });
+
+        completedBytes += zipFile.size;
+        setUploadProgress(Math.min(99, (completedBytes / totalBytes) * 100));
+        uploadOverlay.updateProgress(Math.min(99, (completedBytes / totalBytes) * 100), 'Processing ZIP...');
+        setZipUploading(false);
+
+        if ((payload as { queueJobId?: string })?.queueJobId) {
+          const expected = (payload as { expectedFiles?: number }).expectedFiles;
+          uploadOverlay.trackQueueJob((payload as { queueJobId: string }).queueJobId, expected);
+          queuedZip = true;
+          setActiveQueueJobId((payload as { queueJobId: string }).queueJobId);
+          void pollQueueJob((payload as { queueJobId: string }).queueJobId, effectiveJobId);
+        } else {
+          const names =
+            Array.isArray((payload as { files?: unknown[] })?.files) && (payload as { files: { name?: string; key?: string }[] }).files.length
+              ? (payload as { files: { name?: string; key?: string }[] }).files.map((item) => item.name || item.key || 'CV')
+              : [zipFile.name];
+          uploadedNames.push(...names);
+        }
+      }
+
+      setUploadStatus('Finalizing...');
+      setUploadProgress(100);
+      setUploadedFiles((prev) => [...prev, ...uploadedNames]);
+      setCvFiles([]);
+      setZipFile(null);
+      setZipFileName(null);
+      if (!queuedZip) {
+        uploadOverlay.markSuccess('Upload complete', uploadedNames.length ? `${uploadedNames.length} files uploaded` : undefined);
+        showToast(`Uploaded ${uploadedNames.length} file${uploadedNames.length === 1 ? '' : 's'}`, 'success');
+        if (effectiveJobId) {
+          await fetchResumesForJob(effectiveJobId);
+        }
+      }
+    } catch (error) {
+      const message = (error as Error)?.message ?? 'Upload failed';
+      setUploadError(message);
+      setUploadStatus('Upload failed');
+      setZipUploading(false);
+      uploadOverlay.markError('Upload failed', message);
+      showToast(message, 'error');
+    } finally {
+      setUploadingCv(false);
+      setTimeout(() => setUploadProgress(0), 1200);
+    }
+  };
+
+  const stopResumeProcessingPoll = useCallback(() => {
+    if (resumeProcessPollRef.current) {
+      clearTimeout(resumeProcessPollRef.current);
+      resumeProcessPollRef.current = null;
+    }
+  }, []);
+
+  const updateResumeProcessSession = useCallback((updates: Partial<ResumeProcessingSession>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const prevRaw = window.localStorage.getItem(RESUME_PROCESS_STORAGE_KEY);
+      const prev: ResumeProcessingSession | null = prevRaw ? JSON.parse(prevRaw) : null;
+      const next = { ...(prev || {}), ...updates };
+      if (!next.jobId) return;
+      window.localStorage.setItem(RESUME_PROCESS_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.warn('Failed to persist resume process session', error);
+    }
+  }, []);
+
+  const clearResumeProcessSession = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.removeItem(RESUME_PROCESS_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear resume process session', error);
+    }
+  }, []);
+
+  const updateSortingSession = useCallback((updates: Partial<SortingProcessingSession>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const prevRaw = window.localStorage.getItem(SORTING_PROCESS_STORAGE_KEY);
+      const prev: SortingProcessingSession | null = prevRaw ? JSON.parse(prevRaw) : null;
+      const next = { ...(prev || {}), ...updates };
+      if (!next.jobId) return;
+      window.localStorage.setItem(SORTING_PROCESS_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.warn('Failed to persist sorting session', error);
+    }
+  }, []);
+
+  const clearSortingSession = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.removeItem(SORTING_PROCESS_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear sorting session', error);
+    }
+  }, []);
+
+  const pollResumeProcessing = useCallback(
+    (targetJobId: string, totalAtStart: number) => {
+      stopResumeProcessingPoll();
+      let attempts = 0;
+      let stagnant = 0;
+      let lastPending = totalAtStart;
+
+      const poll = async () => {
+        attempts += 1;
+        try {
+          const response = await fetch(`/api/jobs/${targetJobId}/resumes/summary`, { cache: 'no-store' });
+          if (response.ok) {
+            const payload = await response.json();
+            const total = typeof payload?.total === 'number' ? payload.total : totalAtStart;
+            const completed = typeof payload?.completed === 'number' ? payload.completed : 0;
+            const pending =
+              typeof payload?.pending === 'number'
+                ? payload.pending
+                : Math.max(0, total - completed);
+            const processed = Math.max(0, total - pending);
+            const percent = total ? Math.min(99, Math.max(15, (processed / total) * 100)) : 100;
+            setResumeProcessProgress(percent);
+            updateResumeProcessSession({
+              jobId: targetJobId,
+              total: totalAtStart || total,
+              lastProgress: percent,
+            });
+
+            if (pending === lastPending && pending > 0) {
+              stagnant += 1;
+            } else {
+              stagnant = 0;
+            }
+            lastPending = pending;
+
+            if (pending <= 0 && completed >= total) {
+              setResumeProcessProgress(100);
+              setResumeProcessingState('complete');
+              await fetchResumesForJob(targetJobId);
+              stopResumeProcessingPoll();
+              clearResumeProcessSession();
+              return;
+            }
+
+            // Mark as stuck after ~2 minutes of no movement
+            if (stagnant >= 50 || attempts >= 60) {
+              setResumeProcessingState('error');
+              setResumeProcessError('Processing is taking longer than expected. Please refresh or check worker logs.');
+              stopResumeProcessingPoll();
+              clearResumeProcessSession();
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('Resume processing poll failed', error);
+        }
+
+        resumeProcessPollRef.current = setTimeout(poll, 2000);
+      };
+
+      poll();
+    },
+    [fetchResumesForJob, stopResumeProcessingPoll, updateResumeProcessSession, clearResumeProcessSession],
+  );
+
+  const openResumeProcessingModal = () => {
+    const count = notProcessedCount;
+    setResumeProcessCount(count);
+    setResumeProcessProgress(count ? 5 : 0);
+    setResumeProcessError('');
+    setResumeProcessingState('confirm');
+    setResumeProcessModalOpen(true);
+    setResumeProcessBackground(false);
+  };
+
+  const closeResumeProcessingModal = () => {
+    stopResumeProcessingPoll();
+    setResumeProcessingState('idle');
+    setResumeProcessProgress(0);
+    setResumeProcessError('');
+    setResumeProcessModalOpen(false);
+    setResumeProcessBackground(false);
+    clearResumeProcessSession();
+  };
+
+  // Hide the dialog but keep processing + polling running (used for "Run in background")
+  const minimizeResumeProcessingModal = () => {
+    setResumeProcessModalOpen(false);
+  };
+
+  const confirmResumeProcessing = async () => {
+    if (!jobId) {
+      setResumeProcessError('Select or create a job before processing resumes.');
+      setResumeProcessingState('error');
+      setResumeProcessModalOpen(true);
+      return;
+    }
+
+    const pending = notProcessedCount;
+    if (!pending) {
+      setResumeProcessError('No unprocessed resumes found for this job.');
+      setResumeProcessingState('error');
+      return;
+    }
+
+    setResumeProcessCount(pending);
+    setResumeProcessProgress(Math.max(10, resumeProcessProgress || 10));
+    setResumeProcessError('');
+    setResumeProcessingState('processing');
+    setResumeProcessBackground(false);
+    updateResumeProcessSession({
+      jobId,
+      total: pending,
+      background: false,
+      lastProgress: Math.max(10, resumeProcessProgress || 10),
+      timestamp: Date.now(),
+    });
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/resumes/process`, { method: 'POST' });
+      const payload = await response.json();
+      if (!response.ok) {
+        const message = payload?.error ?? response.statusText ?? 'Failed to start processing';
+        throw new Error(message);
+      }
+
+      setResumeProcessProgress(Math.min(30, resumeProcessProgress || 30));
+      updateResumeProcessSession({
+        lastProgress: Math.min(30, resumeProcessProgress || 30),
+      });
+      await fetchResumesForJob(jobId);
+      pollResumeProcessing(jobId, pending);
+    } catch (error) {
+      setResumeProcessError((error as Error)?.message ?? 'Failed to start processing');
+      setResumeProcessingState('error');
+    }
+  };
+
+  const stopSortingPoll = useCallback(() => {
+    if (sortingPollRef.current) {
+      clearTimeout(sortingPollRef.current);
+      sortingPollRef.current = null;
+    }
+  }, []);
+
+  const pollSortingStatus = useCallback(
+    (targetJobId: string, queueId?: string | null) => {
+      stopSortingPoll();
+      let stagnant = 0;
+
+      const poll = async () => {
+        try {
+          const query = queueId ? `?queueJobId=${encodeURIComponent(queueId)}` : '';
+          const response = await fetch(`/api/jobs/${targetJobId}/sort${query}`, { cache: 'no-store' });
+          if (response.ok) {
+            const payload = await response.json();
+            const state = (payload?.sortingState as string | undefined)?.toUpperCase?.() || 'NOT_STARTED';
+            const queueStatus = (payload?.queueStatus as string | undefined)?.toLowerCase?.() || null;
+
+            if (queueStatus === 'failed' || state === 'ERROR') {
+              setSubmitError('Sorting job failed. Please try again.');
+              setProcessingState('error');
+              setSortingBackground(false);
+              clearSortingSession();
+              stopSortingPoll();
+              return;
+            }
+
+            if (state === 'COMPLETED') {
+              setProgress(100);
+              setProcessingState('complete');
+              setSortingBackground(false);
+              updateSortingSession({
+                jobId: targetJobId,
+                queueJobId: queueId ?? undefined,
+                background: false,
+                lastProgress: 100,
+                timestamp: Date.now(),
+              });
+              clearSortingSession();
+              stopSortingPoll();
+              return;
+            }
+
+            const nextProgress =
+              queueStatus === 'completed'
+                ? 95
+                : queueStatus === 'active'
+                  ? 75
+                  : 55 + Math.min(30, stagnant * 2);
+            setProgress((prev) => {
+              const value = Math.max(prev, Math.min(95, nextProgress));
+              updateSortingSession({
+                jobId: targetJobId,
+                queueJobId: queueId ?? undefined,
+                background: sortingBackgroundRef.current,
+                lastProgress: value,
+                timestamp: Date.now(),
+              });
+              return value;
+            });
+            stagnant += 1;
+          }
+        } catch (error) {
+          console.warn('Sorting status poll failed', error);
+        }
+
+        sortingPollRef.current = setTimeout(poll, 2000);
+      };
+
+      poll();
+    },
+    [stopSortingPoll, updateSortingSession, clearSortingSession],
+  );
+
+  const runSortingInBackground = () => {
+    if (processingState === 'processing') {
+      setShowConfirmation(false);
+      setSortingBackground(true);
+      if (jobId) {
+        updateSortingSession({
+          jobId,
+          queueJobId: sortingQueueJobId ?? undefined,
+          background: true,
+          lastProgress: progress || 0,
+          timestamp: Date.now(),
+        });
+      }
+    }
+  };
+
+  const openSortingOverlay = () => {
+    setShowConfirmation(true);
+    setSortingBackground(false);
+  };
+
+  useEffect(() => {
+    sortingBackgroundRef.current = sortingBackground;
+  }, [sortingBackground]);
+
+  useEffect(() => {
+    return () => {
+      stopResumeProcessingPoll();
+    };
+  }, [stopResumeProcessingPoll]);
+
+  useEffect(() => {
+    return () => {
+      stopSortingPoll();
+    };
+  }, [stopSortingPoll]);
+
+  useEffect(() => {
+    if (processingState === 'complete' || processingState === 'error') {
+      stopSortingPoll();
+      clearSortingSession();
+      setSortingBackground(false);
+      setSortingQueueJobId(null);
+      return;
+    }
+    if (processingState === 'idle') {
+      stopSortingPoll();
+    }
+  }, [processingState, stopSortingPoll, clearSortingSession]);
+
+  // Keep background flag and storage aligned with processing lifecycle
+  useEffect(() => {
+    if (resumeProcessingState === 'complete' || resumeProcessingState === 'error' || resumeProcessingState === 'idle') {
+      setResumeProcessBackground(false);
+      clearResumeProcessSession();
+    }
+  }, [resumeProcessingState, clearResumeProcessSession]);
+
+  useEffect(() => {
+    if (resumeProcessingState === 'processing' && jobId) {
+      updateResumeProcessSession({
+        jobId,
+        background: resumeProcessBackground,
+      });
+    }
+  }, [resumeProcessBackground, resumeProcessingState, jobId, updateResumeProcessSession]);
+
+  useEffect(() => {
+    if (processingState !== 'processing' || !jobId) return;
+    updateSortingSession({
+      jobId,
+      queueJobId: sortingQueueJobId ?? undefined,
+      background: sortingBackground,
+      lastProgress: progress || 0,
+      timestamp: Date.now(),
+    });
+  }, [processingState, jobId, sortingQueueJobId, sortingBackground, progress, updateSortingSession]);
+
+  // On load, restore an in-flight processing session (e.g., after reload)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(RESUME_PROCESS_STORAGE_KEY);
+      if (!raw) return;
+      const session = JSON.parse(raw) as ResumeProcessingSession;
+      if (!session?.jobId) return;
+
+      // Restore job and progress state
+      setJobId((prev) => prev ?? session.jobId);
+      setResumeProcessCount(session.total ?? 0);
+      setResumeProcessProgress(session.lastProgress ?? 15);
+      setResumeProcessingState('processing');
+      setResumeProcessModalOpen(false);
+      setResumeProcessBackground(session.background ?? true);
+
+      // Resume polling to get live progress
+      pollResumeProcessing(session.jobId, (session.total ?? notProcessedCount) || 1);
+    } catch (error) {
+      console.warn('Failed to restore resume processing session', error);
+    }
+  }, [pollResumeProcessing, notProcessedCount, setJobId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(SORTING_PROCESS_STORAGE_KEY);
+      if (!raw) return;
+      const session = JSON.parse(raw) as SortingProcessingSession;
+      if (!session?.jobId) return;
+
+      setJobId((prev) => prev ?? session.jobId);
+      setSortingQueueJobId(session.queueJobId ?? null);
+      setProgress(Math.max(5, session.lastProgress ?? 10));
+      setProcessingState('processing');
+      setShowConfirmation(false);
+      setSortingBackground(session.background ?? true);
+
+      pollSortingStatus(session.jobId, session.queueJobId);
+    } catch (error) {
+      console.warn('Failed to restore sorting session', error);
+    }
+  }, [pollSortingStatus, setJobId]);
 
   const hydrateFromQuery = useCallback(
     (sectionParam: string | null, jobIdParam: string | null, titleParam: string | null) => {
@@ -972,6 +1623,10 @@ function useJobCreationState() {
     setSubmitError,
     createdJobId,
     setCreatedJobId,
+    sortingQueueJobId,
+    sortingBackground,
+    openSortingOverlay,
+    runSortingInBackground,
     errors,
     totalPromptSteps,
     isDetailsStep,
@@ -1009,6 +1664,22 @@ function useJobCreationState() {
     handleConfirmRun,
     previewText,
     hydrateFromQuery,
+    fetchResumesForJob,
+    refreshingResumes,
+    uploadedResumes,
+    notProcessedCount,
+    processedResumeCount,
+    resumeProcessModalOpen,
+    resumeProcessingState,
+    resumeProcessProgress,
+    resumeProcessError,
+    resumeProcessCount,
+    resumeProcessBackground,
+    openResumeProcessingModal,
+    closeResumeProcessingModal,
+    minimizeResumeProcessingModal,
+    setResumeProcessBackground,
+    confirmResumeProcessing,
   };
 }
 

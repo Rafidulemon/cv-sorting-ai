@@ -6,6 +6,7 @@ export class CvProcessor {
   constructor(private readonly cvPipeline: CvPipeline) {}
 
   async handle(payload: { content: Buffer | string }) {
-    return this.cvPipeline.process(payload.content);
+    const buffer = typeof payload.content === "string" ? Buffer.from(payload.content) : payload.content;
+    return this.cvPipeline.process({ buffer });
   }
 }

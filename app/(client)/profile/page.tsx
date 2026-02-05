@@ -54,7 +54,7 @@ type Profile = {
 
 type JobActivity = {
   title: string;
-  status: "Live" | "Draft" | "Reviewing" | "Completed" | "Archived";
+  status: "Active" | "Draft" | "Sorting" | "Sorted";
   cvSorted: number;
   analyzed: number;
   updated: string;
@@ -90,15 +90,13 @@ const formatStatusLabel = (value?: string | null) => {
 const mapJobStatus = (status?: string | null): JobActivity["status"] => {
   switch (status) {
     case "ACTIVE":
-      return "Live";
+      return "Active";
     case "DRAFT":
       return "Draft";
-    case "REVIEWING":
-      return "Reviewing";
-    case "COMPLETED":
-      return "Completed";
-    case "ARCHIVED":
-      return "Archived";
+    case "SORTING":
+      return "Sorting";
+    case "SORTED":
+      return "Sorted";
     default:
       return "Draft";
   }
@@ -774,14 +772,12 @@ export default function ProfilePage() {
               {jobs.map((job) => {
                 const progress = job.cvSorted > 0 ? Math.min(100, Math.round((job.analyzed / job.cvSorted) * 100)) : 0;
                 const statusColor =
-                  job.status === "Live"
+                  job.status === "Active"
                     ? "bg-emerald-50 text-emerald-700"
-                    : job.status === "Reviewing"
+                    : job.status === "Sorting"
                     ? "bg-amber-50 text-amber-700"
-                    : job.status === "Completed"
+                    : job.status === "Sorted"
                     ? "bg-primary-50 text-primary-700"
-                    : job.status === "Archived"
-                    ? "bg-[#f5f7fb] text-[#6b7280]"
                     : "bg-[#f5f7fb] text-[#6b7280]";
                 return (
                   <div key={job.title} className="space-y-2 rounded-2xl border border-[#EEF2F7] bg-[#f8fafc] p-4">

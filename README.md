@@ -2,6 +2,43 @@
 
 carriX is a Next.js 16 / React 19 platform that automates CV intake, parsing, and AI-driven scoring so hiring teams can shortlist faster.
 
+### Feature snapshot
+- Job authoring (AI-assisted) with role details and preview.
+- CV intake: drag & drop single files or large ZIPs.
+- Background ZIP processing: uploads return immediately, queue-backed worker extracts, dedupes AppleDouble entries, and streams progress to a global overlay that survives navigation.
+- Resume listing: uploaded resumes auto-refresh per selected job (refresh button available).
+- Parsing & scoring pipeline: OCR → parsing → embedding → scoring (worker).
+- Worker tip: If you see `PrismaClientKnownRequestError: Unable to start a transaction in the given time`, reduce DB contention (lower CV worker concurrency) or increase Prisma transaction `maxWait`/`timeout` (see `carrix-backend/apps/worker/src/queue/cv.queue.runner.ts`).
+- Candidate records auto-created and linked to jobs; job requirements updated with file/resume IDs.
+- Auth: NextAuth (JWT), optional Google OAuth; org scoping & default org per user.
+- Notifications plumbing (email/push/in-app) scaffolded; export jobs scaffolding.
+- Admin console for operational tasks (hidden from end-user).
+
+### Core technologies
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind v4, lucide-react, next/font.
+- **State / UX**: Context-based JobCreationProvider, global upload overlay (upload + queue polling), resumable progress.
+- **Backend**: NestJS (API + worker apps), TypeScript, Prisma ORM.
+- **Data**: PostgreSQL (Neon), Prisma migrations.
+- **Storage**: S3-compatible (Cloudflare R2/S3) presigned PUT/GET/DELETE.
+- **AI / Processing**: OCR + parsing + embedding + scoring pipeline (CvPipeline) executed by worker.
+- **Auth**: NextAuth with credentials + Google (optional).
+- **Utilities**: JSZip for archive handling, crypto WebCrypto for signing.
+
+### Full technology stack (current)
+- **Client web**: Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS v4, `lucide-react`, `react-dropzone`, `zod`, `clsx`, `next/font`; app and admin shells live under `app/`.
+- **Auth/session**: NextAuth v5 (JWT strategy) with credentials + optional Google OAuth; org + seat scoping enforced in API handlers.
+- **API surface**: Next.js route handlers for console/admin/billing plus a dedicated NestJS API app (`carrix-backend/apps/api`) for orgs, jobs, candidates, files, notifications, and queue control.
+- **Background workers**: NestJS worker app (`carrix-backend/apps/worker`) with BullMQ + Redis for sorting; custom CV pipeline runner over Prisma queue tables for ingest/parsing/embedding/scoring.
+- **AI/ML**: OpenAI `gpt-4o-mini` for structured resume parsing; `text-embedding-3-small` for job/resume embeddings; cosine similarity scoring; optional OCR placeholder; chunking + averaging for long resumes.
+- **Vector search & ranking**: Qdrant (REST) per-job collections with cosine distance; embeddings upserted then searched to rank resumes; defensive recreation on dim mismatch.
+- **Data layer**: PostgreSQL (Neon) via Prisma 5.22; embeddings stored as `float8[]`; migrations + seeding scripts; queue jobs persisted in DB.
+- **Storage**: S3-compatible buckets (Cloudflare R2/S3) for resumes and ZIP uploads; presigned PUT/GET/DELETE; 20MB per-file cap, 75MB per ZIP cap enforced in worker.
+- **Queues & cache**: Redis/Upstash + BullMQ for sorting; Prisma-backed queue for CV ingestion; queue prefix/concurrency tunable via env (`QUEUE_PREFIX`, `QUEUE_CONCURRENCY_SORTING`).
+- **Payments & credits**: SSLCOMMERZ gateway for credit purchase; credit ledger + plan enforcement; receipts via Nodemailer.
+- **Email/notifications**: Nodemailer plumbing with templates; push/in-app hooks scaffolded.
+- **Utilities & parsing**: `pdf-parse` + JSZip (PDF/DOCX extraction), S3 presigner, WebCrypto hashing, OpenAI-powered parsers, `baseline-browser-mapping` for Tailwind v4.
+- **Dev & ops**: TypeScript, ESLint 9, ts-node-dev, Prisma Studio, Docker Compose for Redis + Qdrant, Neon for Postgres; scripts in `package.json` for API/worker/dev/build/lint.
+
 ### How it works for companies
 1) **Create a company**: any owner can sign up and create their company workspace.  
 2) **Invite the team**: owners invite members; seat limits depend on the chosen subscription.  
@@ -49,6 +86,17 @@ carriX is a Next.js 16 / React 19 platform that automates CV intake, parsing, an
   - Client console: `app/(client)/` (dashboard, jobs, CV analysis, history, settings, billing/credits).  
   - Admin console: `app/(admin)/admin/` (operational tooling; hidden from end-user flows).  
   - Shared components: `app/components/`.
+
+### Project details & process flow
+- **Job setup**: Users create a job (title, description, criteria). Prisma stores the job; a job embedding is created on demand from description/preview text if missing.
+- **Upload & ingest**: Client requests presigned PUT for S3/R2, then uploads single CVs or ZIPs (up to 75MB, 20MB per file). An entry lands in the Prisma-backed `QueueJob` table pointing to the stored object.
+- **ZIP fan-out**: Worker (`CvQueueRunner`) downloads the ZIP, skips AppleDouble files, enforces size/type limits, and creates per-file resume records. Each resume gets its own processing job.
+- **Extraction & parsing**: For each resume the worker fetches from storage, extracts text via `pdf-parse` (PDF) or JSZip (DOCX/TXT), falls back to raw text, and applies OpenAI (`gpt-4o-mini`) to produce structured resume JSON (skills, experience, education, totals).
+- **Embeddings & scoring**: Text is chunked and embedded with `text-embedding-3-small`; cosine similarity against the job embedding yields the primary score. Chunk embeddings are persisted for future re-ranks.
+- **Vector ranker**: The BullMQ `SortingWorker` pulls jobs, ensures a Qdrant collection per job, upserts averaged resume embeddings, then runs a search to rank candidates. Scores are written back to resumes/jobs (`overallScore`, `scoreBreakdown`, `sortingState`).
+- **UX feedback**: Frontend shows a global upload/progress overlay that survives navigation, auto-refreshes resume lists per job, and lets admins trigger reprocessing/sorting.
+- **Billing & credits**: Plan limits plus per-resume credits gate ingestion; SSLCOMMERZ flows create payment sessions and callbacks apply credits + send receipts.
+- **Ops & recovery**: Queue concurrency, prefixes, and Redis/Qdrant URLs are environment-driven; workers defensively recreate Qdrant collections on dimension mismatches and sanitize invalid vectors during upsert.
 
 ### Backend (NestJS monorepo)
 ```

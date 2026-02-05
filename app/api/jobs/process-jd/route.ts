@@ -46,6 +46,8 @@ const jobSelect: Prisma.JobSelect = {
   title: true,
   status: true,
   sortingState: true,
+  cvSortedCount: true,
+  cvAnalyzedCount: true,
   description: true,
   previewHtml: true,
   requirements: true,

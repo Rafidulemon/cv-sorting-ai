@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -57,14 +58,16 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [jobsPage, setJobsPage] = useState(1);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
   const jobsPageSize = 5;
 
-  useEffect(() => {
-    const loadJobs = async () => {
+  const loadJobs = useCallback(
+    async (opts?: { showSpinner?: boolean; signal?: AbortSignal }) => {
+      const showSpinner = opts?.showSpinner ?? false;
       try {
-        setLoading(true);
+        if (showSpinner) setLoading(true);
         setError("");
-        const response = await fetch("/api/jobs", { cache: "no-store" });
+        const response = await fetch("/api/jobs", { cache: "no-store", signal: opts?.signal });
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(payload?.error ?? "Failed to load jobs");
@@ -73,16 +76,29 @@ export default function JobsPage() {
         setViewerId((payload?.viewerId as string | undefined) ?? null);
         setRawJobs(apiJobs);
         setJobs(apiJobs.map(mapJobToSummary));
+        setLastSync(new Date());
       } catch (err) {
+        if ((err as Error)?.name === "AbortError") return;
         const message = (err as Error)?.message ?? "Failed to load jobs";
         setError(message);
       } finally {
-        setLoading(false);
+        if (showSpinner) setLoading(false);
       }
-    };
+    },
+    [],
+  );
 
-    loadJobs();
-  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadJobs({ showSpinner: true, signal: controller.signal });
+    const interval = setInterval(() => {
+      loadJobs({ showSpinner: false, signal: controller.signal }).catch(() => undefined);
+    }, 10000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [loadJobs]);
 
   const statusFilterOptions: Array<{ value: "all" | JobSummary["status"]; label: string }> = useMemo(() => {
     const unique = new Set(jobs.map((job) => job.status));
@@ -158,6 +174,28 @@ export default function JobsPage() {
     return max || 1;
   }, [jobVelocity]);
 
+  const totals = useMemo(() => {
+    const total = jobs.length;
+    const active = jobs.filter((job) => job.status === "Active").length;
+    const draft = jobs.filter((job) => job.status === "Draft").length;
+    const needsSorting = jobs.filter((job) => job.sortingState === "NOT_STARTED").length;
+    const processing = jobs.filter((job) => job.sortingState === "PROCESSING").length;
+    const sorted = jobs.filter((job) => job.sortingState === "COMPLETED").length;
+    const uploadedCvs = jobs.reduce((sum, job) => sum + (job.candidates ?? 0), 0);
+    const shortlisted = jobs.reduce((sum, job) => sum + (job.shortlist ?? 0), 0);
+    return { total, active, draft, needsSorting, processing, sorted, uploadedCvs, shortlisted };
+  }, [jobs]);
+
+  const summaryCards: Array<{ label: string; value: number | string; helper: string; icon: LucideIcon }> = useMemo(
+    () => [
+      { label: "Open roles", value: totals.total, helper: `${totals.active} active · ${totals.draft} drafts`, icon: Briefcase },
+      { label: "Sorting state", value: `${totals.processing} processing`, helper: `${totals.needsSorting} need sorting · ${totals.sorted} sorted`, icon: LineChart },
+      { label: "CVs uploaded", value: totals.uploadedCvs, helper: `${totals.shortlisted} shortlisted`, icon: Users2 },
+      { label: "Created by you", value: yourJobs.length, helper: viewerId ? "Owned by you" : "Sign in to filter", icon: BarChart3 },
+    ],
+    [totals, viewerId, yourJobs.length],
+  );
+
   const linePoints = useMemo(() => {
     if (!jobVelocity.length) return "";
     return jobVelocity
@@ -203,7 +241,34 @@ export default function JobsPage() {
           <Plus className="h-4 w-4" />
           Create New Job
         </Link>
+        <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+          <button
+            type="button"
+            onClick={() => loadJobs({ showSpinner: true })}
+            className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 font-semibold text-[#181B31] transition hover:border-[#3D64FF]/50 hover:text-[#3D64FF]"
+          >
+            Refresh
+          </button>
+          <span className="text-[11px]">
+            {lastSync ? `Synced ${lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Syncing..."}
+          </span>
+        </div>
       </header>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <div key={card.label} className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-card-soft">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#E8EDFF] to-white text-[#3D64FF]">
+              <card.icon className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">{card.label}</p>
+              <p className="text-xl font-semibold text-[#181B31]">{card.value}</p>
+              <p className="text-xs text-[#6B7280]">{card.helper}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-card-soft">
@@ -450,6 +515,9 @@ export default function JobsPage() {
                 className="w-full bg-transparent py-2.5 text-sm text-[#181B31] placeholder:text-[#9CA3AF] focus:outline-none"
               />
             </div>
+            <p className="mt-2 text-[11px] text-[#9CA3AF]">
+              Live filters run against your job list—no hardcoded demos.
+            </p>
           </div>
         </div>
 

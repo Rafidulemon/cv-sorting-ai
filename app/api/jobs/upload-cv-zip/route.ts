@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import JSZip from "jszip";
 import { createHash, webcrypto } from "crypto";
-import { FileProvider, Prisma, CvProcessingStatus } from "@prisma/client";
+import { FileProvider, QueueName, QueueStatus } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 
 export const runtime = "nodejs";
@@ -36,6 +36,17 @@ const allowedExtensions: Record<string, string> = {
   doc: "application/msword",
   txt: "text/plain",
 };
+
+function isAppleDoubleFile(path: string) {
+  // macOS zip archives often include AppleDouble metadata files under __MACOSX/ or with a ._ prefix.
+  const normalized = path.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  const basename = segments[segments.length - 1] || normalized;
+
+  if (segments.some((segment) => segment === "__MACOSX")) return true;
+  if (basename.startsWith("._")) return true;
+  return false;
+}
 
 function sanitizeFileName(raw: string) {
   const base = raw.split(/[/\\]/).pop() ?? raw;
@@ -223,38 +234,14 @@ async function uploadBufferToStorage(params: {
   }
 }
 
-function deriveRequirements(
-  current: Prisma.JsonValue | null,
-  uploadedIds: string[],
-  resumeIds: string[],
-): Prisma.InputJsonValue {
-  const base =
-    current && typeof current === "object" && !Array.isArray(current)
-      ? { ...(current as Record<string, unknown>) }
-      : {};
-  const existing = Array.isArray((base as Record<string, unknown>).resumeFileIds)
-    ? ((base as Record<string, unknown>).resumeFileIds as unknown[])
-        .map((value) => (typeof value === "string" ? value : String(value)))
-    : [];
-  const existingResumeIds = Array.isArray((base as Record<string, unknown>).resumeIds)
-    ? ((base as Record<string, unknown>).resumeIds as unknown[])
-        .map((value) => (typeof value === "string" ? value : String(value)))
-    : [];
-
-  const mergedFiles = Array.from(new Set([...existing, ...uploadedIds]));
-  const mergedResumes = Array.from(new Set([...existingResumeIds, ...resumeIds]));
-  return { ...base, resumeFileIds: mergedFiles, resumeIds: mergedResumes } as Prisma.InputJsonValue;
-}
-
 function detectContentType(fileName: string) {
   const extension = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() ?? "" : "";
   return allowedExtensions[extension] ?? null;
 }
 
-function deriveCandidateName(fileName: string) {
-  const base = fileName.includes(".") ? fileName.slice(0, fileName.lastIndexOf(".")) : fileName;
-  const cleaned = base.replace(/[-_]+/g, " ").trim();
-  return cleaned.length ? cleaned : "Unknown Candidate";
+function buildZipObjectKey(orgId: string, jobId: string, fileName: string) {
+  const safe = sanitizeFileName(fileName);
+  return ["uploads", "job-candidate-zips", orgId, jobId, `${Date.now()}-${safe}`].join("/");
 }
 
 export async function POST(request: NextRequest) {
@@ -300,141 +287,52 @@ export async function POST(request: NextRequest) {
     }
 
     const zipBuffer = Buffer.from(await file.arrayBuffer());
-    const zip = await JSZip.loadAsync(zipBuffer);
+    const zip = await JSZip.loadAsync(zipBuffer, { checkCRC32: true });
 
     const fileEntries = Object.values(zip.files).filter(
-      (entry) => !entry.dir && detectContentType(entry.name),
+      (entry) => !entry.dir && !isAppleDoubleFile(entry.name) && detectContentType(entry.name),
     );
 
     if (!fileEntries.length) {
       return NextResponse.json({ error: "No supported CV files found in the ZIP" }, { status: 400 });
     }
 
-    const uploaded: { record: { id: string; key: string; mimeType: string | null; size: number | null; createdAt: Date }; name: string; publicUrl: string | null; resumeId: string }[] = [];
+    const zipKey = buildZipObjectKey(orgId, jobId, file.name);
 
-    for (const entry of fileEntries) {
-      const safeName = sanitizeFileName(entry.name);
-      const contentType = detectContentType(safeName);
-      if (!contentType) continue;
+    await uploadBufferToStorage({
+      buffer: zipBuffer,
+      key: zipKey,
+      contentType: "application/zip",
+      storage,
+    });
 
-      const buffer = await entry.async("nodebuffer");
-      if (buffer.byteLength > MAX_ENTRY_BYTES) {
-        continue;
-      }
-
-      const objectKey = [
-        "uploads",
-        "job-candidates",
-        orgId,
-        jobId,
-        `${Date.now()}-${safeName}`,
-      ].join("/");
-
-      await uploadBufferToStorage({
-        buffer,
-        key: objectKey,
-        contentType,
-        storage,
-      });
-
-      const checksum = createHash("sha256").update(buffer).digest("hex");
-      const candidateName = deriveCandidateName(safeName);
-
-      const { record, resume } = await prisma.$transaction(async (tx) => {
-        const record = await tx.fileObject.create({
-          data: {
-            organizationId: orgId,
-            key: objectKey,
-            bucket: storage.bucket,
-            provider: storage.provider,
-            region: storage.region,
-            mimeType: contentType,
-            size: buffer.byteLength,
-            checksum,
-            uploadedById: uploaderId,
-            metadata: {
-              originalName: safeName,
-              source: "zip-upload",
-            },
-          },
-          select: {
-            id: true,
-            key: true,
-            mimeType: true,
-            size: true,
-            createdAt: true,
-          },
-        });
-
-        const candidate = await tx.candidate.create({
-          data: {
-            organizationId: orgId,
-            fullName: candidateName,
-            source: "upload",
-          },
-          select: { id: true },
-        });
-
-        const resume = await tx.resume.create({
-          data: {
-            organizationId: orgId,
-            candidateId: candidate.id,
-            jobId: owningJob.id,
-            fileId: record.id,
-            uploadedById: uploaderId,
-            status: CvProcessingStatus.UPLOADED,
-          },
-          select: { id: true },
-        });
-
-        return { record, resume };
-      });
-
-      const publicUrl =
-        storage.publicBaseUrl && storage.publicBaseUrl.length
-          ? `${storage.publicBaseUrl.replace(/\/+$/, "")}/${objectKey}`
-          : null;
-
-      uploaded.push({
-        record,
-        name: safeName,
-        publicUrl,
-        resumeId: resume.id,
-      });
-    }
-
-    if (!uploaded.length) {
-      return NextResponse.json(
-        { error: "ZIP contained no supported files under 20MB" },
-        { status: 400 },
-      );
-    }
-
-    const nextRequirements = deriveRequirements(
-      owningJob.requirements,
-      uploaded.map((file) => file.record.id),
-      uploaded.map((file) => file.resumeId),
-    );
-
-    await prisma.job.update({
-      where: { id: owningJob.id },
+    const queueJob = await prisma.queueJob.create({
       data: {
-        requirements: nextRequirements,
-        lastActivityAt: new Date(),
+        organizationId: orgId,
+        userId: uploaderId,
+        jobId: owningJob.id,
+        queue: QueueName.CV_PIPELINE,
+        status: QueueStatus.QUEUED,
+        payload: {
+          zipKey,
+          zipName: file.name,
+          zipSize: file.size,
+          expectedFiles: fileEntries.length,
+          uploadedFrom: "zip-upload",
+        },
       },
+      select: { id: true, status: true, payload: true },
     });
 
-    return NextResponse.json({
-      jobId: owningJob.id,
-      files: uploaded.map((item) => ({
-        ...item.record,
-        name: item.name,
-        publicUrl: item.publicUrl,
-        resumeId: item.resumeId,
-      })),
-      added: uploaded.length,
-      requirementKey: "resumeFileIds",
-    });
+    return NextResponse.json(
+      {
+        queued: true,
+        queueJobId: queueJob.id,
+        expectedFiles: fileEntries.length,
+        jobId: owningJob.id,
+      },
+      { status: 202 },
+    );
   } catch (error) {
     console.error("[jobs/upload-cv-zip] Failed to process ZIP", error);
     const message = error instanceof Error ? error.message : "Failed to upload ZIP";

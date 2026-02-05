@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -9,6 +8,7 @@ import {
   Briefcase,
   FileUp,
   LinkIcon,
+  Loader2,
   Plus,
   Sparkles,
   UploadCloud,
@@ -31,7 +31,7 @@ export default function UploadCandidatesPage() {
   const [mounted, setMounted] = useState(false);
   const {
     goToRoleDetailsStep,
-    uploadedFiles,
+    setMode,
     cvFiles,
     handleUploadFiles,
     handleDropFiles,
@@ -60,6 +60,12 @@ export default function UploadCandidatesPage() {
     setJobId,
     aiForm,
     setAiForm,
+    refreshingResumes,
+    fetchResumesForJob,
+    uploadedResumes,
+    notProcessedCount,
+    processedResumeCount,
+    openResumeProcessingModal,
   } = useJobCreation();
 
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? "");
@@ -72,7 +78,9 @@ export default function UploadCandidatesPage() {
     const jobIdParam = searchParams.get("jobId");
     const titleParam = searchParams.get("title");
     hydrateFromQuery(sectionParam, jobIdParam, titleParam);
-  }, [hydrateFromQuery, searchParams]);
+    // Ensure upload mode for correct validation on this page
+    setMode("upload");
+  }, [hydrateFromQuery, searchParams, setMode]);
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -150,24 +158,8 @@ export default function UploadCandidatesPage() {
     setMounted(true);
   }, []);
 
-  const uploadOverlay =
-    (uploadingCv || zipUploading || uploadProgress > 0) && (
-      <div className="fixed bottom-6 right-6 z-[999] w-[320px] rounded-3xl border border-[#DCE0E0] bg-white/95 p-4 shadow-card-soft backdrop-blur">
-        <div className="flex items-center justify-between text-sm font-semibold text-[#181B31]">
-          <span>Uploading files</span>
-          <span className="text-xs text-[#4B5563]">{Math.round(uploadProgress)}%</span>
-        </div>
-        <p className="mt-1 text-xs text-[#4B5563]">
-          {uploadStatus || "Preparing upload..."}
-        </p>
-        <div className="mt-3 h-2 w-full rounded-full bg-[#E5E7EB]">
-          <div
-            className="h-2 rounded-full bg-[#3D64FF] transition-all"
-            style={{ width: `${Math.min(100, Math.max(0, uploadProgress))}%` }}
-          />
-        </div>
-      </div>
-    );
+  const hasPendingResumes = notProcessedCount > 0;
+  const hasProcessedResumes = processedResumeCount > 0;
 
   return (
     <div className="space-y-8 text-[#181B31]">
@@ -205,7 +197,7 @@ export default function UploadCandidatesPage() {
               <div className="flex items-center justify-between">
                 <span>CVs queued</span>
                 <span className="rounded-full bg-[#3D64FF]/15 px-3 py-1 text-xs font-semibold text-[#3D64FF]">
-                  {uploadedFiles.length + cvFiles.length + (zipFileName ? 1 : 0) || 47}
+                  {uploadedResumes.length + cvFiles.length + (zipFileName ? 1 : 0)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -434,8 +426,7 @@ export default function UploadCandidatesPage() {
                   disabled={
                     uploadingCv ||
                     zipUploading ||
-                    (!cvFiles.length && !zipFileName) ||
-                    !(selectedJobId || jobId)
+                    (!cvFiles.length && !zipFileName)
                   }
                   className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
                     uploadingCv || zipUploading || (!cvFiles.length && !zipFileName)
@@ -496,6 +487,83 @@ export default function UploadCandidatesPage() {
 
           <div className="space-y-6">
             <div className="rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-[#181B31]">Uploaded CVs</h3>
+                  <p className="text-sm text-[#4B5563]">
+                    Showing files attached to this job.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchResumesForJob(selectedJob?.id || jobId || '')}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#DCE0E0] bg-[#FFFFFF] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#181B31] transition hover:border-[#3D64FF]/40 hover:bg-[#F0F2F8]"
+                  disabled={refreshingResumes || !(selectedJob?.id || jobId)}
+                >
+                  {refreshingResumes ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
+
+              {uploadedResumes.length === 0 ? (
+                <div className="mt-4 rounded-2xl border border-dashed border-[#DCE0E0] bg-[#F8FAFF] px-4 py-6 text-sm text-[#8A94A6]">
+                  No CVs uploaded for this job yet.
+                </div>
+              ) : (
+                <ul className="mt-4 divide-y divide-[#E5E7EB] rounded-2xl border border-[#DCE0E0] bg-[#F8FAFF]">
+                  {uploadedResumes.map((row, idx) => {
+                    const isProcessing = ["PARSING", "EMBEDDING", "SCORING"].includes(row.status);
+                    const statusLabel =
+                      row.status === "COMPLETED"
+                        ? "Processed"
+                        : row.status === "FAILED"
+                          ? "Failed"
+                          : row.status === "PARSING"
+                            ? "Extracting"
+                            : row.status === "EMBEDDING"
+                              ? "Embedding"
+                              : row.status === "SCORING"
+                                ? "Scoring"
+                                : "Not processed";
+                    const statusTone =
+                      row.status === "COMPLETED"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : row.status === "FAILED"
+                          ? "bg-red-50 text-red-600"
+                          : "bg-amber-50 text-amber-700";
+                    return (
+                      <li
+                        key={`${row.name}-${idx}`}
+                        className="flex items-center justify-between gap-3 px-4 py-3 text-sm text-[#181B31]"
+                      >
+                        <span className="truncate pr-3">{row.name}</span>
+                        <span className="flex items-center gap-2">
+                          {isProcessing && <Loader2 className="h-4 w-4 animate-spin text-[#3D64FF]" />}
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${statusTone}`}>
+                            {statusLabel}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={openResumeProcessingModal}
+                  disabled={!hasPendingResumes}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                    hasPendingResumes
+                      ? "border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
+                      : "cursor-not-allowed border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]"
+                  }`}
+                >
+                  Start Processing
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-6 shadow-card-soft backdrop-blur">
               <h3 className="text-lg font-semibold text-[#181B31]">
                 Ranking configuration
               </h3>
@@ -507,27 +575,28 @@ export default function UploadCandidatesPage() {
                 <div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium text-[#181B31]">
-                      Number of top candidates
+                      Number of candidates to sort
                     </span>
                     <span className="rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-3 py-1 text-xs font-semibold text-[#3D64FF]">
-                      {topCandidates} candidates
+                      Max {processedResumeCount || 0}
                     </span>
                   </div>
-                  <input
-                    type="range"
-                    min={5}
-                    max={50}
-                    step={5}
-                    value={topCandidates}
-                    onChange={(event) =>
-                      setTopCandidates(Number(event.target.value))
-                    }
-                    className="mt-4 w-full accent-[#3D64FF]"
-                  />
-                  <div className="mt-2 flex justify-between text-[11px] text-[#8A94A6]">
-                    {[10, 25, 50].map((mark) => (
-                      <span key={mark}>{mark}</span>
-                    ))}
+                  <div className="mt-3 flex items-center gap-3">
+                    <input
+                      type="number"
+                      min={0}
+                      max={processedResumeCount || 0}
+                      value={topCandidates}
+                      onChange={(event) => {
+                        const next = Number(event.target.value);
+                        const capped = Math.max(0, Math.min(next, processedResumeCount || 0));
+                        setTopCandidates(capped);
+                      }}
+                      className="w-32 rounded-xl border border-[#DCE0E0] px-3 py-2 text-sm text-[#181B31] focus:border-[#3D64FF] focus:outline-none"
+                    />
+                    <p className="text-xs text-[#4B5563]">
+                      You have {processedResumeCount} processed resume{processedResumeCount === 1 ? '' : 's'}.
+                    </p>
                   </div>
                 </div>
 
@@ -536,9 +605,9 @@ export default function UploadCandidatesPage() {
                     Usage preview
                   </p>
                   <div className="mt-3 flex items-center justify-between">
-                    <span>Estimated credits consumed</span>
+                    <span>Exact candidates to sort</span>
                     <span className="rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-4 py-1 text-xs font-semibold text-[#3D64FF]">
-                      {costUsage.consumed} of {costUsage.total}
+                      {Math.min(topCandidates, processedResumeCount)} candidate{Math.min(topCandidates, processedResumeCount) === 1 ? '' : 's'}
                     </span>
                   </div>
                 </div>
@@ -577,9 +646,17 @@ export default function UploadCandidatesPage() {
                     setProcessingState("idle");
                     setProgress(0);
                   }}
-                  disabled={!canStartSorting}
+                  disabled={
+                    !canStartSorting ||
+                    !hasProcessedResumes ||
+                    topCandidates === 0 ||
+                    topCandidates > processedResumeCount
+                  }
                   className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-wide transition ${
-                    canStartSorting
+                    canStartSorting &&
+                    hasProcessedResumes &&
+                    topCandidates > 0 &&
+                    topCandidates <= processedResumeCount
                       ? "border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
                       : "cursor-not-allowed border border-[#DCE0E0] bg-[#FFFFFF] text-[#8A94A6]"
                   }`}
@@ -592,7 +669,6 @@ export default function UploadCandidatesPage() {
           </div>
         </div>
       </div>
-      {mounted && uploadOverlay ? createPortal(uploadOverlay, document.body) : null}
     </div>
   );
 }

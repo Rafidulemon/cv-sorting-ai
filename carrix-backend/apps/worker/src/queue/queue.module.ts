@@ -14,6 +14,8 @@ import { ScoringService } from "../services/scoring/scoring.service";
 import { EmailService } from "../services/notification/email.service";
 import { PushService } from "../services/notification/push.service";
 import { InappService } from "../services/notification/inapp.service";
+import { CvQueueRunner } from "./cv.queue.runner";
+import { SortingWorker } from "./sorting.worker";
 
 @Module({
   providers: [
@@ -32,6 +34,8 @@ import { InappService } from "../services/notification/inapp.service";
     EmailService,
     PushService,
     InappService,
+    CvQueueRunner,
+    SortingWorker,
   ],
   exports: [
     CvProcessor,
