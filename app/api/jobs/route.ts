@@ -3,6 +3,7 @@ import { getToken } from "next-auth/jwt";
 import { EmploymentType } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import OpenAI from "openai";
 import prisma from "@/app/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -162,6 +163,52 @@ function stripHtml(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+async function buildJobEmbeddingText(data: {
+  title?: string | null;
+  description?: string | null;
+  previewHtml?: string | null;
+  requirements?: Prisma.InputJsonValue | null;
+  tags?: string[] | null;
+  locations?: string[] | null;
+}) {
+  const parts: string[] = [];
+  if (data.title) parts.push(`Title: ${data.title}`);
+  if (data.description) parts.push(`Description: ${data.description}`);
+  if (data.previewHtml) parts.push(`Preview: ${stripHtml(data.previewHtml)}`);
+
+  if (data.requirements && typeof data.requirements === "object" && !Array.isArray(data.requirements)) {
+    const req = data.requirements as Record<string, unknown>;
+    if (Array.isArray(req.responsibilities)) parts.push(`Responsibilities: ${(req.responsibilities as string[]).join(", ")}`);
+    if (Array.isArray(req.skills)) parts.push(`Skills: ${(req.skills as string[]).join(", ")}`);
+    if (typeof req.experienceLevel === "string") parts.push(`Experience: ${req.experienceLevel}`);
+    if (typeof req.companyCulture === "string") parts.push(`Culture: ${req.companyCulture}`);
+  }
+
+  if (data.tags?.length) parts.push(`Tags: ${data.tags.join(", ")}`);
+  if (data.locations?.length) parts.push(`Locations: ${data.locations.join(", ")}`);
+
+  return parts.join("\n").trim();
+}
+
+async function upsertJobEmbedding(jobId: string, text: string) {
+  if (!process.env.OPENAI_API_KEY) return;
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const model = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-large";
+  const cleaned = text.slice(0, 6000); // stay within token limits
+  const response = await openai.embeddings.create({
+    model,
+    input: cleaned,
+  });
+  const embedding = response.data?.[0]?.embedding;
+  if (!embedding?.length) return;
+
+  await prisma.jobEmbedding.upsert({
+    where: { jobId },
+    update: { embedding },
+    create: { jobId, embedding },
+  });
+}
+
 function resolvePreviewHtml(payload: z.infer<typeof createJobSchema>) {
   if (payload.previewHtml?.trim()) {
     return sanitizeHtml(payload.previewHtml);
@@ -312,6 +359,23 @@ export async function POST(request: NextRequest) {
           },
           select: jobSelect,
         });
+
+    // Build and store job embedding (best-effort; non-blocking failures bubble)
+    try {
+      const embeddingText = await buildJobEmbeddingText({
+        title: job.title,
+        description: job.description,
+        previewHtml: job.previewHtml,
+        requirements: job.requirements as Prisma.InputJsonValue | null,
+        tags: job.tags,
+        locations: job.locations,
+      });
+      if (embeddingText) {
+        await upsertJobEmbedding(job.id, embeddingText);
+      }
+    } catch (embedErr) {
+      console.warn("[jobs] Failed to upsert job embedding", embedErr);
+    }
 
     return NextResponse.json({ job });
   } catch (error) {

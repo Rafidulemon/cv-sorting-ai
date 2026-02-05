@@ -1,18 +1,10 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
 
-const ibmPlexSans = IBM_Plex_Sans({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Offline-safe font fallbacks: avoid build-time fetch from Google Fonts
+const ibmPlexSans = { variable: "" };
+const jetbrainsMono = { variable: "" };
 
 export const metadata: Metadata = {
   title: "CV Sort AI",

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { CvProcessingStatus } from "@prisma/client";
+import { CvProcessingStatus, Prisma } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 
 const authSecret = process.env.NEXTAUTH_SECRET ?? "dev-secret-change-me";
@@ -78,11 +78,11 @@ export async function GET(request: NextRequest) {
       ...(search
         ? {
             OR: [
-              { fullName: { contains: search, mode: "insensitive" } },
-              { email: { contains: search, mode: "insensitive" } },
-              { phone: { contains: search, mode: "insensitive" } },
-              { location: { contains: search, mode: "insensitive" } },
-              { headline: { contains: search, mode: "insensitive" } },
+              { fullName: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { phone: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { location: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { headline: { contains: search, mode: Prisma.QueryMode.insensitive } },
               { tags: { hasSome: [search] } },
             ],
           }

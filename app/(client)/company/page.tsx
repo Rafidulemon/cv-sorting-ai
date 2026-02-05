@@ -14,7 +14,6 @@ import {
   Mail,
   PencilLine,
   Sparkles,
-  TrendingUp,
   ShieldCheck,
   Wallet,
   BarChart3,
@@ -176,6 +175,7 @@ export default function CompanyPage() {
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState(() => resolveLogo(null));
   const [planSnapshot, setPlanSnapshot] = useState<CompanyPlanSnapshot>(emptyPlanSnapshot);
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
 
   const isCompanyAdmin = role === "COMPANY_ADMIN";
 
@@ -253,6 +253,7 @@ export default function CompanyPage() {
           seatLimit: teamLimit ?? prev.seatLimit,
           creditBalance: creditBalanceFromPayload ?? prev.creditBalance,
         }));
+        setLastFetchedAt(Date.now());
         setLoadError("");
       }
     } catch (error) {
@@ -605,16 +606,8 @@ export default function CompanyPage() {
   const seatsRemaining = Math.max(seatLimit - seatsUsed, 0);
   const canInviteMore = seatLimit > 0 && seatsRemaining > 0;
 
-  const cvHistory: CompanyBarData[] = [
-    { label: "Jan", value: 280 },
-    { label: "Feb", value: 320 },
-    { label: "Mar", value: 410 },
-    { label: "Apr", value: 390 },
-    { label: "May", value: 440 },
-  ];
-
-  const creditHistory = [1180, 1230, 1200, 1260, 1240, 1275];
-  const cvSparkline = creditHistory;
+  const cvHistory: CompanyBarData[] = [];
+  const cvSparkline: number[] = [];
 
   useEffect(() => {
     if (!initialData) return;
@@ -751,12 +744,7 @@ export default function CompanyPage() {
           helper="Credits available for sorting and exports"
           icon={Wallet}
           accent="emerald"
-          footer={
-            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
-              <TrendingUp className="h-4 w-4" />
-              +3.8% vs last week
-            </div>
-          }
+          footer={null}
         />
         <MetricCard
           title="CVs sorted"
@@ -773,15 +761,17 @@ export default function CompanyPage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-[#1f2a44]">CV sorting trend</p>
-              <p className="text-xs text-[#6b7280]">Recent activity by month (dummy data)</p>
+              <p className="text-xs text-[#6b7280]">Recent activity by month</p>
             </div>
-            <span className="rounded-full bg-[#f5f7fb] px-3 py-1 text-xs font-semibold text-[#4b5563]">Updated just now</span>
+            <span className="rounded-full bg-[#f5f7fb] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+              {lastFetchedAt ? `Updated ${new Date(lastFetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Loading..."}
+            </span>
           </div>
           <MiniBarChart data={cvHistory} accent="#3D64FF" />
           <div className="rounded-2xl bg-[#f8fafc] px-4 py-3 text-xs text-[#4b5563]">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#1f2a44]">
               <Activity className="h-4 w-4 text-primary-600" />
-              Volume is trending upward; keep uploads flowing to hit targets.
+              {cvHistory.length ? "Volume is trending upward; keep uploads flowing to hit targets." : "No sorting history yet."}
             </div>
           </div>
         </div>
@@ -800,15 +790,15 @@ export default function CompanyPage() {
           <div className="space-y-3 rounded-2xl bg-[#f8fafc] p-4">
             <div className="flex items-center justify-between text-sm font-semibold text-[#1f2a44]">
               <span>Average weekly spend</span>
-              <span>~210 credits</span>
+              <span>{cvSparkline.length ? "~" : "—"}{cvSparkline.length ? Math.round(cvSparkline.reduce((a, b) => a + b, 0) / cvSparkline.length) : ""} {cvSparkline.length ? "credits" : ""}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-[#4b5563]">
-              <span>Last top-up</span>
-              <span>12 days ago</span>
+              <span>Last update</span>
+              <span>{lastFetchedAt ? new Date(lastFetchedAt).toLocaleDateString() : "—"}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-[#4b5563]">
               <span>Projected runway</span>
-              <span>~3.5 weeks</span>
+              <span>{planSnapshot.creditBalance > 0 ? "Based on live balance" : "—"}</span>
             </div>
           </div>
         </div>

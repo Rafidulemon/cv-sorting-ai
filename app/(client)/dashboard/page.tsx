@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Clock, Sparkles, Timer, TrendingUp } from "lucide-react";
+import { CheckCircle2, Clock, Sparkles } from "lucide-react";
 import type { ApiJob, JobSummary } from "../jobs/data";
 import { mapJobToSummary } from "../jobs/data";
 
@@ -25,29 +25,40 @@ const statusTone: Record<string, string> = {
   Completed: "from-[#a5b4fc] to-[#6366f1]",
 };
 
-const timeSavingsData = [
-  { label: "Mon", minutes: 42 },
-  { label: "Tue", minutes: 55 },
-  { label: "Wed", minutes: 63 },
-  { label: "Thu", minutes: 71 },
-  { label: "Fri", minutes: 64 },
-  { label: "Sat", minutes: 38 },
-  { label: "Sun", minutes: 46 },
-];
+type ResumeSummary = {
+  statusCounts: Record<string, number>;
+  dailyTimeSaved: { date: string; completed: number }[];
+  monthlySuccess: { month: string; completed: number; total: number; successRate: number }[];
+  avgSortSeconds: number | null;
+  totalSorted: number;
+};
 
-const successRateData = [
-  { label: "Week 1", value: 82 },
-  { label: "Week 2", value: 86 },
-  { label: "Week 3", value: 89 },
-  { label: "Week 4", value: 93 },
-];
+const resumeStatusColor: Record<string, string> = {
+  UPLOADED: "from-[#c4d4ff] to-[#7ea5ff]",
+  PARSING: "from-[#fde68a] to-[#f59e0b]",
+  EMBEDDING: "from-[#a7f3d0] to-[#34d399]",
+  SCORING: "from-[#f9a8d4] to-[#ec4899]",
+  COMPLETED: "from-[#c7d2fe] to-[#6366f1]",
+  FAILED: "from-[#fecdd3] to-[#f87171]",
+};
 
-const maxTimeSaved = Math.max(...timeSavingsData.map((item) => item.minutes));
+function formatAvgSeconds(value: number | null) {
+  if (value == null) return "—";
+  if (value >= 60) {
+    const minutes = Math.floor(value / 60);
+    const seconds = Math.round(value % 60)
+      .toString()
+      .padStart(2, "0");
+    return `${minutes}:${seconds}m`;
+  }
+  return `${Math.round(value)}s`;
+}
 
 export default function DashboardPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [recentJobs, setRecentJobs] = useState<JobSummary[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [resumeSummary, setResumeSummary] = useState<ResumeSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -56,16 +67,19 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         setError("");
-        const [jobsRes, candidatesRes] = await Promise.all([
+        const [jobsRes, candidatesRes, resumeSummaryRes] = await Promise.all([
           fetch("/api/jobs", { cache: "no-store" }),
           fetch("/api/candidates", { cache: "no-store" }),
+          fetch("/api/resumes/summary", { cache: "no-store" }),
         ]);
 
         const jobsPayload = await jobsRes.json();
         const candidatePayload = await candidatesRes.json();
+        const resumeSummaryPayload = await resumeSummaryRes.json();
 
         if (!jobsRes.ok) throw new Error(jobsPayload?.error ?? "Failed to load jobs");
         if (!candidatesRes.ok) throw new Error(candidatePayload?.error ?? "Failed to load candidates");
+        if (!resumeSummaryRes.ok) throw new Error(resumeSummaryPayload?.error ?? "Failed to load resume summary");
 
         const apiJobs = Array.isArray(jobsPayload?.jobs) ? (jobsPayload.jobs as ApiJob[]) : [];
         const mappedJobs = apiJobs.map(mapJobToSummary);
@@ -76,6 +90,8 @@ export default function DashboardPage() {
           ? (candidatePayload.candidates as Candidate[])
           : [];
         setCandidates(apiCandidates);
+
+        setResumeSummary(resumeSummaryPayload as ResumeSummary);
       } catch (err) {
         setError((err as Error)?.message ?? "Unable to load dashboard");
       } finally {
@@ -89,16 +105,48 @@ export default function DashboardPage() {
   const statCards = useMemo(() => {
     const active = jobs.filter((job) => job.status === "Active").length;
     const totalCandidates = candidates.length;
-    const shortlisted = jobs.reduce((sum, job) => sum + (job.shortlist ?? 0), 0);
+    const avgSortSeconds = resumeSummary?.avgSortSeconds ?? null;
     return [
       { label: "Active jobs", value: String(active), helper: "Running screenings", gradient: "from-[#ffe2f1] via-[#fff5fb] to-white" },
-      { label: "Candidates", value: String(totalCandidates || 0), helper: "In your pipeline", gradient: "from-[#e9e8ff] via-[#f3f2ff] to-white" },
-      { label: "Shortlisted", value: String(shortlisted || 0), helper: "Top matches surfaced", gradient: "from-[#f3e4ff] via-[#f9f2ff] to-white" },
-      { label: "Avg. time saved", value: "58%", helper: "Vs manual screening", gradient: "from-[#e2f5ff] via-[#f0faff] to-white" },
+      { label: "Total jobs", value: String(jobs.length), helper: "Across your org", gradient: "from-[#e9e8ff] via-[#f3f2ff] to-white" },
+      { label: "Candidates", value: String(totalCandidates || 0), helper: "In your pipeline", gradient: "from-[#f3e4ff] via-[#f9f2ff] to-white" },
+      {
+        label: "Shortlist rate",
+        value: formatAvgSeconds(avgSortSeconds),
+        helper: "Avg sorting time per resume",
+        gradient: "from-[#e2f5ff] via-[#f0faff] to-white",
+      },
     ];
-  }, [jobs, candidates]);
+  }, [jobs, candidates, resumeSummary]);
 
   const candidateList = candidates.slice(0, 5);
+  const pipeline = useMemo(() => {
+    const entries = Object.entries(resumeSummary?.statusCounts ?? {});
+    const total = entries.reduce((sum, [, count]) => sum + count, 0);
+    return entries.map(([status, count]) => {
+      const pct = total ? Math.round((count / total) * 100) : 0;
+      return {
+        label: status.replaceAll("_", " "),
+        value: count,
+        pct,
+        color: resumeStatusColor[status] ?? "from-[#e5e7eb] to-[#d1d5db]",
+      };
+    });
+  }, [resumeSummary]);
+
+  const timeSaved = useMemo(() => {
+    const points = resumeSummary?.dailyTimeSaved ?? [];
+    const mapped = points.map((p) => ({
+      label: new Date(p.date).toLocaleDateString(undefined, { weekday: "short" }),
+      minutes: p.completed * 2,
+    }));
+    const max = mapped.length ? Math.max(...mapped.map((p) => p.minutes)) || 1 : 1;
+    return { points: mapped, max };
+  }, [resumeSummary]);
+
+  const successMonthly = resumeSummary?.monthlySuccess ?? [];
+  const totalMinutesSaved = timeSaved.points.reduce((sum, p) => sum + p.minutes, 0);
+  const barTransition = "transition-all duration-500 ease-out";
 
   return (
     <div className="space-y-6 text-[#1f2a44]">
@@ -116,7 +164,7 @@ export default function DashboardPage() {
         <div className="relative space-y-6">
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">Welcome back</p>
-            <h1 className="text-3xl font-semibold leading-tight text-[#1f2a44] sm:text-4xl">Welcome back, Rafid</h1>
+            <h1 className="text-3xl font-semibold leading-tight text-[#1f2a44] sm:text-4xl">Welcome back</h1>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -138,70 +186,115 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-3">
         <section className="space-y-6 rounded-[28px] border border-white/60 bg-white/80 p-5 shadow-card-soft backdrop-blur xl:col-span-2 xl:p-6">
+          
+
+          <div className="grid gap-4 rounded-2xl border border-white/70 bg-gradient-to-br from-[#fdf2ff] via-white to-[#eaf5ff] p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a90a6]">Pipeline snapshot</p>
+                <h3 className="text-lg font-semibold text-[#1f2a44]">Where candidates sit today</h3>
+              </div>
+              <Sparkles className="h-5 w-5 text-[#7c5dfa]" />
+            </div>
+            <div className="space-y-3">
+              {pipeline.map((row) => (
+                <div key={row.label} className="space-y-1 rounded-xl border border-white/70 bg-white/80 p-3 shadow-inner">
+                  <div className="flex items-center justify-between text-sm text-[#1f2a44]">
+                    <span className="font-semibold">{row.label}</span>
+                    <span className="text-xs text-[#6b7280]">{row.value} candidates</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#eef2f7]">
+                    <div
+                      className={`h-full rounded-full bg-gradient-to-r ${row.color} ${barTransition}`}
+                      style={{ width: `${Math.max(4, row.pct)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+              {!pipeline.length && <p className="text-sm text-[#8a90a6]">No resumes yet.</p>}
+            </div>
+            <div className="flex items-end gap-2 rounded-xl border border-white/70 bg-white/90 p-3">
+              {pipeline.map((row) => (
+                <div key={row.label} className="flex-1 space-y-1 text-center">
+                  <div className="flex h-20 items-end rounded-lg bg-[#f8f7fb] p-1">
+                    <div
+                      className={`w-full rounded-md bg-gradient-to-t ${row.color} ${barTransition}`}
+                      style={{ height: `${Math.max(6, row.pct)}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] font-semibold text-[#6b7280]">{row.label}</p>
+                  <p className="text-[11px] text-[#9ca3af]">{row.pct}%</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-4 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <div className="rounded-xl bg-[#f5f0ff] p-2 text-primary-500">
-                    <Timer className="h-4 w-4" />
+                    <Sparkles className="h-4 w-4" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-[#1f2a44]">AI time saved</h3>
-                    <p className="text-sm text-[#8a90a6]">Vs manual CV review (per day)</p>
+                    <p className="text-sm text-[#8a90a6]">Based on completed resumes (2 mins manual each)</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-semibold text-[#1f2a44]">12.4h</p>
-                  <p className="text-xs text-[#8a90a6]">saved this week</p>
+                  <p className="text-2xl font-semibold text-[#1f2a44]">
+                    {timeSaved.points.length ? `${Math.round(totalMinutesSaved / 60)}h` : "—"}
+                  </p>
+                  <p className="text-xs text-[#8a90a6]">last 7 days</p>
                 </div>
               </div>
               <div className="flex items-end gap-3 rounded-2xl border border-white/70 bg-gradient-to-b from-[#f7f2fb] to-white p-3">
-                {timeSavingsData.map((item) => (
+                {timeSaved.points.map((item) => (
                   <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
                     <div className="flex h-28 w-full items-end rounded-lg bg-white/60 p-1 shadow-inner">
                       <div
-                        className="w-full rounded-lg bg-gradient-to-t from-[#f3b5d6] via-[#b294ff] to-[#7c5dfa]"
-                        style={{ height: `${(item.minutes / maxTimeSaved) * 100}%` }}
+                        className={`w-full rounded-lg bg-gradient-to-t from-[#f3b5d6] via-[#b294ff] to-[#7c5dfa] ${barTransition}`}
+                        style={{ height: `${timeSaved.max ? (item.minutes / timeSaved.max) * 100 : 0}%` }}
                       />
                     </div>
                     <span className="text-xs font-semibold text-[#8a90a6]">{item.label}</span>
                   </div>
                 ))}
+                {!timeSaved.points.length && <p className="text-sm text-[#8a90a6]">No completed resumes yet.</p>}
               </div>
-              <p className="text-xs text-[#8a90a6]">AI auto-sorting trims repetitive screening and gives recruiters their time back.</p>
+              <p className="text-xs text-[#8a90a6]">AI sorting offsets manual review time across your uploads.</p>
             </div>
 
             <div className="space-y-4 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <div className="rounded-xl bg-[#fff3f9] p-2 text-[#f06292]">
-                    <TrendingUp className="h-4 w-4" />
+                    <Sparkles className="h-4 w-4" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-[#1f2a44]">Success rate</h3>
-                    <p className="text-sm text-[#8a90a6]">Shortlisted → interview-ready candidates</p>
+                    <p className="text-sm text-[#8a90a6]">Monthly completed vs total resumes</p>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-semibold text-[#1f2a44]">93%</p>
-                  <p className="text-xs text-[#8a90a6]">+4.1% vs last cycle</p>
                 </div>
               </div>
               <div className="space-y-2 rounded-2xl border border-white/70 bg-gradient-to-b from-[#f0f5ff] via-white to-white p-3">
-                {successRateData.map((point) => (
-                  <div key={point.label} className="flex items-center gap-3">
-                    <span className="w-16 text-xs font-semibold text-[#1f2a44]">{point.label}</span>
+                {successMonthly.map((point) => (
+                  <div key={point.month} className="flex items-center gap-3">
+                    <span className="w-16 text-xs font-semibold text-[#1f2a44]">{point.month}</span>
                     <div className="flex-1 overflow-hidden rounded-full bg-[#f0e8f7]">
                       <div
-                        className="h-2 rounded-full bg-gradient-to-r from-[#7c5dfa] via-[#9c6cf8] to-[#f06292]"
-                        style={{ width: `${point.value}%` }}
+                        className={`h-2 rounded-full bg-gradient-to-r from-[#7c5dfa] via-[#9c6cf8] to-[#f06292] ${barTransition}`}
+                        style={{ width: `${Math.min(100, point.successRate)}%` }}
                       />
                     </div>
-                    <span className="w-12 text-right text-xs font-semibold text-[#1f2a44]">{point.value}%</span>
+                    <span className="w-20 text-right text-xs font-semibold text-[#1f2a44]">
+                      {point.successRate}% ({point.completed}/{point.total || 0})
+                    </span>
                   </div>
                 ))}
+                {!successMonthly.length && <p className="text-sm text-[#8a90a6]">No resume activity yet.</p>}
               </div>
-              <p className="text-xs text-[#8a90a6]">Quality stays high as the CV sorter prioritizes signals that match your JD.</p>
+              <p className="text-xs text-[#8a90a6]">Tracks how many resumes complete scoring each month.</p>
             </div>
           </div>
 
@@ -310,7 +403,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-4 rounded-[28px] border border-white/60 bg-white/80 p-5 shadow-card-soft backdrop-blur xl:p-6">
+        <section className="h-fit flex flex-col gap-4 rounded-[28px] border border-white/60 bg-white/80 p-5 shadow-card-soft backdrop-blur xl:p-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">Start a new shortlist</p>
             <h3 className="text-2xl font-semibold text-[#1f2a44]">Add your role and upload CVs</h3>
@@ -339,17 +432,12 @@ export default function DashboardPage() {
           </div>
 
           <Link
-            href="/candidates"
+            href="/jobs/new"
             className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]"
           >
             <CheckCircle2 className="h-4 w-4" />
             Upload &amp; Screen Now
           </Link>
-          <button className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#efe7f5] bg-white px-4 py-3 text-sm font-semibold text-[#8a90a6] shadow-sm transition hover:-translate-y-0.5 hover:border-primary-200 hover:text-primary-500">
-            Import from ATS
-            <ArrowRight className="h-4 w-4" />
-          </button>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c1c5d6]">Coming soon</p>
         </section>
       </div>
     </div>

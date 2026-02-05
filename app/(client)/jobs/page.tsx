@@ -223,35 +223,34 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-10 text-[#181B31]">
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#E5E7EB] bg-white px-6 py-5 shadow-card-soft">
+      <header className="flex flex-wrap items-start justify-between gap-4 rounded-3xl border border-[#E5E7EB] bg-white px-6 py-5 shadow-card-soft">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">
-            Pipeline
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold">Jobs</h1>
+          <h1 className="text-2xl font-semibold">Jobs</h1>
           <p className="text-sm text-[#4B5563]">
             Track every opening, monitor performance, and jump back into your
             drafts.
           </p>
         </div>
-        <Link
-          href="/jobs/new"
-          className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]"
-        >
-          <Plus className="h-4 w-4" />
-          Create New Job
-        </Link>
-        <div className="flex items-center gap-2 text-xs text-[#6B7280]">
-          <button
-            type="button"
-            onClick={() => loadJobs({ showSpinner: true })}
-            className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 font-semibold text-[#181B31] transition hover:border-[#3D64FF]/50 hover:text-[#3D64FF]"
+        <div className="flex flex-col items-end gap-2">
+          <Link
+            href="/jobs/new"
+            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]"
           >
-            Refresh
-          </button>
-          <span className="text-[11px]">
-            {lastSync ? `Synced ${lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Syncing..."}
-          </span>
+            <Plus className="h-4 w-4" />
+            Create New Job
+          </Link>
+          <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+            <button
+              type="button"
+              onClick={() => loadJobs({ showSpinner: true })}
+              className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 font-semibold text-[#181B31] transition hover:border-[#3D64FF]/50 hover:text-[#3D64FF]"
+            >
+              Refresh
+            </button>
+            <span className="text-[11px]">
+              {lastSync ? `Synced ${lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Syncing..."}
+            </span>
+          </div>
         </div>
       </header>
 
