@@ -325,6 +325,10 @@ model Job {
   cvSortedCount   Int             @default(0)
   cvAnalyzedCount Int             @default(0)
   lastActivityAt  DateTime?
+  minEducation    String?
+  ageMin          Int?
+  ageMax          Int?
+  nationality     String?
   salaryMin       Int?
   salaryMax       Int?
   currency        String?         @default("BDT")

@@ -78,6 +78,11 @@ export async function GET(
     orderBy: { createdAt: "desc" },
   });
 
+  const publicBase =
+    process.env.S3_PUBLIC_BASE_URL ||
+    process.env.NEXT_PUBLIC_S3_PUBLIC_BASE_URL ||
+    null;
+
   const files = resumes
     .map((resume) => {
       const nameFromMeta =
@@ -91,9 +96,16 @@ export async function GET(
           ? nameFromMeta
           : resume.file?.key?.split("/").pop() ?? "Resume";
 
+      const publicUrl =
+        publicBase && resume.file?.key
+          ? `${publicBase.replace(/\/+$/, "")}/${resume.file.key}`
+          : null;
+
       return {
         resumeId: resume.id,
         fileId: resume.file?.id ?? null,
+        key: resume.file?.key ?? null,
+        publicUrl,
         name,
         status: resume.status,
         mimeType: resume.file?.mimeType ?? null,

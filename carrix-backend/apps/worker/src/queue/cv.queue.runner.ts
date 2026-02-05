@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import { createHash, webcrypto } from "crypto";
 import {
   CvProcessingStatus,
+  JobStatus,
   FileProvider,
   QueueJob,
   QueueName,
@@ -189,9 +190,15 @@ export class CvQueueRunner implements OnModuleInit, OnModuleDestroy {
 
       const successes: { fileId: string; resumeId: string; name: string }[] = [];
       const failures: { name: string; reason: string }[] = [];
+      const seenNames = new Set<string>();
 
       for (const entry of entries) {
         const safeName = this.sanitizeFileName(entry.name);
+        if (seenNames.has(safeName)) {
+          failures.push({ name: safeName, reason: "duplicate filename in ZIP" });
+          continue;
+        }
+        seenNames.add(safeName);
         const contentType = this.detectContentType(safeName);
         if (!contentType) continue;
 
@@ -202,6 +209,16 @@ export class CvQueueRunner implements OnModuleInit, OnModuleDestroy {
         }
 
         try {
+          const checksum = createHash("sha256").update(buffer).digest("hex");
+          const existing = await prisma.fileObject.findFirst({
+            where: { organizationId: orgId, checksum },
+            select: { id: true },
+          });
+          if (existing) {
+            failures.push({ name: safeName, reason: "duplicate file (checksum match) already uploaded" });
+            continue;
+          }
+
           const objectKey = ["uploads", "job-candidates", orgId, jobId, `${Date.now()}-${safeName}`].join("/");
 
           await this.uploadBufferToStorage({
@@ -211,7 +228,6 @@ export class CvQueueRunner implements OnModuleInit, OnModuleDestroy {
             storage,
           });
 
-          const checksum = createHash("sha256").update(buffer).digest("hex");
           const candidateName = this.deriveCandidateName(safeName);
 
           const { record, resume } = await prisma.$transaction(async (tx) => {
@@ -288,6 +304,7 @@ export class CvQueueRunner implements OnModuleInit, OnModuleDestroy {
           data: {
             requirements: nextRequirements,
             lastActivityAt: new Date(),
+            status: JobStatus.ACTIVE,
           },
         });
       }
@@ -340,6 +357,18 @@ export class CvQueueRunner implements OnModuleInit, OnModuleDestroy {
             previewHtml: true,
             requirements: true,
             embedding: { select: { embedding: true } },
+          },
+        },
+        candidate: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            headline: true,
+            yearsExperience: true,
+            tags: true,
+            primaryResumeId: true,
           },
         },
       },
@@ -409,6 +438,30 @@ export class CvQueueRunner implements OnModuleInit, OnModuleDestroy {
             embedding,
           })),
           skipDuplicates: true, // avoid race-induced unique constraint errors
+        });
+      }
+
+      const parsed = pipelineResult.parsedJson || {};
+      const mergedTags = Array.from(
+        new Set([...(resume.candidate?.tags ?? []), ...(parsed.skills ?? [])].filter(Boolean)),
+      );
+
+      const candidateUpdate: Prisma.CandidateUpdateInput = {};
+      if (parsed.name) candidateUpdate.fullName = parsed.name;
+      if (parsed.email) candidateUpdate.email = parsed.email;
+      if (parsed.phone) candidateUpdate.phone = parsed.phone;
+      if (parsed.summary) candidateUpdate.headline = parsed.summary.slice(0, 180);
+      if (Number.isFinite(parsed.totalYears)) {
+        candidateUpdate.yearsExperience = Math.round((parsed.totalYears as number) ?? 0);
+      }
+      if (mergedTags.length) candidateUpdate.tags = { set: mergedTags };
+      if (!resume.candidate?.primaryResumeId) {
+        candidateUpdate.primaryResume = { connect: { id: resumeId } };
+      }
+      if (Object.keys(candidateUpdate).length) {
+        await prisma.candidate.update({
+          where: { id: resume.candidateId },
+          data: candidateUpdate,
         });
       }
 

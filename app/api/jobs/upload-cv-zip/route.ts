@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import JSZip from "jszip";
 import { createHash, webcrypto } from "crypto";
-import { FileProvider, QueueName, QueueStatus } from "@prisma/client";
+import { FileProvider, JobStatus, QueueName, QueueStatus } from "@prisma/client";
 import prisma from "@/app/lib/prisma";
 
 export const runtime = "nodejs";
@@ -306,23 +306,33 @@ export async function POST(request: NextRequest) {
       storage,
     });
 
-    const queueJob = await prisma.queueJob.create({
-      data: {
-        organizationId: orgId,
-        userId: uploaderId,
-        jobId: owningJob.id,
-        queue: QueueName.CV_PIPELINE,
-        status: QueueStatus.QUEUED,
-        payload: {
-          zipKey,
-          zipName: file.name,
-          zipSize: file.size,
-          expectedFiles: fileEntries.length,
-          uploadedFrom: "zip-upload",
+    const [, queueJob] = await prisma.$transaction([
+      prisma.job.update({
+        where: { id: owningJob.id },
+        data: {
+          status: JobStatus.ACTIVE,
+          lastActivityAt: new Date(),
         },
-      },
-      select: { id: true, status: true, payload: true },
-    });
+        select: { id: true },
+      }),
+      prisma.queueJob.create({
+        data: {
+          organizationId: orgId,
+          userId: uploaderId,
+          jobId: owningJob.id,
+          queue: QueueName.CV_PIPELINE,
+          status: QueueStatus.QUEUED,
+          payload: {
+            zipKey,
+            zipName: file.name,
+            zipSize: file.size,
+            expectedFiles: fileEntries.length,
+            uploadedFrom: "zip-upload",
+          },
+        },
+        select: { id: true, status: true, payload: true },
+      }),
+    ]);
 
     return NextResponse.json(
       {

@@ -27,6 +27,10 @@ type CreateJobDescriptionProps = {
   salaryMax: number | '';
   currency: string;
   currencyOptions: string[];
+  minEducation: string;
+  nationality: string;
+  ageMin: number | '';
+  ageMax: number | '';
   canSkipCurrent: boolean;
   isCurrentFieldValid: boolean;
   canSaveDraft: boolean;
@@ -42,6 +46,10 @@ type CreateJobDescriptionProps = {
   onSalaryMinChange: (value: number | '') => void;
   onSalaryMaxChange: (value: number | '') => void;
   onCurrencyChange: (value: string) => void;
+  onMinEducationChange: (value: string) => void;
+  onNationalityChange: (value: string) => void;
+  onAgeMinChange: (value: number | '') => void;
+  onAgeMaxChange: (value: number | '') => void;
 };
 
 export default function CreateJobDescription({
@@ -61,6 +69,10 @@ export default function CreateJobDescription({
   salaryMax,
   currency,
   currencyOptions,
+  minEducation,
+  nationality,
+  ageMin,
+  ageMax,
   canSkipCurrent,
   isCurrentFieldValid,
   canSaveDraft,
@@ -76,6 +88,10 @@ export default function CreateJobDescription({
   onSalaryMinChange,
   onSalaryMaxChange,
   onCurrencyChange,
+  onMinEducationChange,
+  onNationalityChange,
+  onAgeMinChange,
+  onAgeMaxChange,
 }: CreateJobDescriptionProps) {
   return (
     <div className="relative overflow-hidden rounded-4xl border border-[#DCE0E0] bg-[#FFFFFF] p-8 shadow-card-soft backdrop-blur">
@@ -207,6 +223,50 @@ export default function CreateJobDescription({
                     </option>
                   ))}
                 </select>
+              </label>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-[13px]">
+                <span className="font-medium text-[#181B31]">Minimum education</span>
+                <input
+                  value={minEducation}
+                  onChange={(event) => onMinEducationChange(event.target.value)}
+                  placeholder="Any / Bachelor’s / Masters"
+                  className="w-full rounded-xl border border-[#DCE0E0] bg-[#F7F8FC] p-3 text-sm text-[#181B31] placeholder:text-[#8A94A6] focus:border-[#3D64FF]/60 focus:outline-none focus:ring-2 focus:ring-[#3D64FF]/20"
+                />
+              </label>
+              <label className="space-y-1 text-[13px]">
+                <span className="font-medium text-[#181B31]">Nationality</span>
+                <input
+                  value={nationality}
+                  onChange={(event) => onNationalityChange(event.target.value)}
+                  placeholder="Any / Bangladeshi / US Citizen"
+                  className="w-full rounded-xl border border-[#DCE0E0] bg-[#F7F8FC] p-3 text-sm text-[#181B31] placeholder:text-[#8A94A6] focus:border-[#3D64FF]/60 focus:outline-none focus:ring-2 focus:ring-[#3D64FF]/20"
+                />
+              </label>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-[13px]">
+                <span className="font-medium text-[#181B31]">Minimum age</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={ageMin}
+                  onChange={(event) => onAgeMinChange(event.target.value ? Number(event.target.value) : '')}
+                  placeholder="e.g., 18"
+                  className="w-full rounded-xl border border-[#DCE0E0] bg-[#F7F8FC] p-3 text-sm text-[#181B31] placeholder:text-[#8A94A6] focus:border-[#3D64FF]/60 focus:outline-none focus:ring-2 focus:ring-[#3D64FF]/20"
+                />
+              </label>
+              <label className="space-y-1 text-[13px]">
+                <span className="font-medium text-[#181B31]">Maximum age</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={ageMax}
+                  onChange={(event) => onAgeMaxChange(event.target.value ? Number(event.target.value) : '')}
+                  placeholder="e.g., 55"
+                  className="w-full rounded-xl border border-[#DCE0E0] bg-[#F7F8FC] p-3 text-sm text-[#181B31] placeholder:text-[#8A94A6] focus:border-[#3D64FF]/60 focus:outline-none focus:ring-2 focus:ring-[#3D64FF]/20"
+                />
               </label>
             </div>
           </div>

@@ -25,9 +25,12 @@ export class CvParser {
   }
 
   async parse(text: string): Promise<{ parsedJson: ParsedResume; extractedFields: ParsedResume }> {
-    const normalized = cleanText(text);
+    const baseline = this.basicParse(text);
+    const normalized = cleanText(text); // keep for the LLM prompt; baseline needs original newlines
+
     if (!this.openai) {
-      throw new Error("OPENAI_API_KEY missing: parsing requires OpenAI");
+      const merged = this.mergeFields(baseline, baseline);
+      return { parsedJson: merged, extractedFields: merged };
     }
 
     try {
@@ -56,12 +59,13 @@ export class CvParser {
       });
 
       const raw = response.choices[0]?.message?.content ?? "{}";
-      const parsed = JSON.parse(raw) as ParsedResume;
-      const merged = this.mergeFields(parsed, parsed);
+      const aiParsed = JSON.parse(raw) as ParsedResume;
+      const merged = this.mergeFields(baseline, aiParsed);
       return { parsedJson: merged, extractedFields: merged };
     } catch (error) {
       this.logger.error(`AI parse failed: ${(error as Error).message}`);
-      throw error;
+      const merged = this.mergeFields(baseline, baseline);
+      return { parsedJson: merged, extractedFields: merged };
     }
   }
 
@@ -70,12 +74,14 @@ export class CvParser {
       new Set([...(base.skills || []), ...(ai?.skills || [])].map((skill) => skill.trim()).filter(Boolean)),
     );
     return {
-      ...base,
-      ...ai,
+      name: ai?.name?.trim() || base.name,
+      email: ai?.email ?? base.email ?? null,
+      phone: ai?.phone ?? base.phone ?? null,
       skills,
       experience: ai?.experience?.length ? ai.experience : base.experience,
       education: ai?.education?.length ? ai.education : base.education,
       totalYears: ai?.totalYears ?? base.totalYears,
+      summary: ai?.summary || base.summary,
     };
   }
 

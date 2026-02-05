@@ -69,6 +69,14 @@ export default function NewJobPage() {
     hydrateFromQuery,
     uploadedFiles,
     topCandidates,
+    minEducation,
+    setMinEducation,
+    nationality,
+    setNationality,
+    ageMin,
+    setAgeMin,
+    ageMax,
+    setAgeMax,
   } = useJobCreation();
 
   useEffect(() => {
@@ -235,6 +243,10 @@ export default function NewJobPage() {
                 salaryMax={salaryMax}
                 currency={currency}
                 currencyOptions={currencyOptions}
+                minEducation={minEducation}
+                nationality={nationality}
+                ageMin={ageMin}
+                ageMax={ageMax}
                 canSkipCurrent={canSkipCurrent}
                 isCurrentFieldValid={isCurrentFieldValid}
                 canSaveDraft={canSaveDraft}
@@ -250,6 +262,10 @@ export default function NewJobPage() {
                 onSalaryMinChange={(value) => setSalaryMin(value)}
                 onSalaryMaxChange={(value) => setSalaryMax(value)}
                 onCurrencyChange={(value) => setCurrency(value)}
+                onMinEducationChange={(value) => setMinEducation(value)}
+                onNationalityChange={(value) => setNationality(value)}
+                onAgeMinChange={(value) => setAgeMin(value)}
+                onAgeMaxChange={(value) => setAgeMax(value)}
               />
             ) : (
               <UploadDescription

@@ -113,6 +113,10 @@ function useJobCreationState() {
   const [salaryMin, setSalaryMin] = useState<number | ''>('');
   const [salaryMax, setSalaryMax] = useState<number | ''>('');
   const [currency, setCurrency] = useState<string>('BDT');
+  const [minEducation, setMinEducation] = useState<string>('Any');
+  const [ageMin, setAgeMin] = useState<number | ''>('');
+  const [ageMax, setAgeMax] = useState<number | ''>('');
+  const [nationality, setNationality] = useState<string>('Any');
   const [experienceOptions, setExperienceOptions] = useState<string[]>([...fallbackExperienceOptions]);
   const [employmentTypeOptions, setEmploymentTypeOptions] = useState<string[]>([...fallbackEmploymentTypeOptions]);
   const [currencyOptions, setCurrencyOptions] = useState<string[]>([...fallbackCurrencyOptions]);
@@ -821,6 +825,11 @@ function useJobCreationState() {
     const openingsValue = Number.isFinite(Number(openings)) && Number(openings) > 0 ? Number(openings) : undefined;
     const salaryMinValue = typeof salaryMin === 'number' && Number.isFinite(salaryMin) ? salaryMin : undefined;
     const salaryMaxValue = typeof salaryMax === 'number' && Number.isFinite(salaryMax) ? salaryMax : undefined;
+    const ageMinValue = typeof ageMin === 'number' && Number.isFinite(ageMin) ? ageMin : undefined;
+    const ageMaxValue = typeof ageMax === 'number' && Number.isFinite(ageMax) ? ageMax : undefined;
+    if (ageMinValue !== undefined && ageMaxValue !== undefined && ageMinValue > ageMaxValue) {
+      throw new Error('Minimum age cannot be greater than maximum age.');
+    }
     const trimmedDriveLink = driveLink.trim();
     if (trimmedDriveLink && !isValidHttpUrl(trimmedDriveLink)) {
       throw new Error('Enter a valid drive link (include https://).');
@@ -848,6 +857,10 @@ function useJobCreationState() {
         salaryMin: salaryMinValue,
         salaryMax: salaryMaxValue,
         currency,
+        minEducation: minEducation.trim() || 'Any',
+        nationality: nationality.trim() || 'Any',
+        ageMin: ageMinValue,
+        ageMax: ageMaxValue,
       }),
     });
 
@@ -1610,6 +1623,14 @@ function useJobCreationState() {
     experienceOptions,
     employmentTypeOptions,
     currencyOptions,
+    minEducation,
+    setMinEducation,
+    ageMin,
+    setAgeMin,
+    ageMax,
+    setAgeMax,
+    nationality,
+    setNationality,
     savingDraft,
     draftJobId,
     draftError,

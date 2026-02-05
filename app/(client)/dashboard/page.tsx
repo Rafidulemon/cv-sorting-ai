@@ -339,7 +339,7 @@ export default function DashboardPage() {
           </div>
 
           <Link
-            href="/cv/analyze"
+            href="/candidates"
             className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary-500 to-[#f06292] px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_45px_-22px_rgba(216,8,128,0.55)] transition hover:translate-y-[-2px]"
           >
             <CheckCircle2 className="h-4 w-4" />

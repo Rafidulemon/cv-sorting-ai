@@ -405,44 +405,69 @@ export default function JobDetailPage() {
             </div>
             <p className="text-sm text-[#6B7280]">{sortingTone[sortingState].helper}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href={uploadHref}
-              className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#0F172A] transition hover:border-[#3D64FF]/50 hover:bg-[#F1F5FF]"
-            >
-              <UploadCloud className="h-4 w-4 text-[#3D64FF]" />
-              Upload CVs
-            </Link>
-            <button
-              type="button"
-              onClick={startSorting}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-wide transition ${
-                disableStart
-                  ? 'cursor-not-allowed border border-[#E5E7EB] bg-[#F5F7FB] text-[#8A94A6]'
-                  : 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'
-              }`}
-              disabled={disableStart}
-            >
-              {sortingState === 'COMPLETED' ? <RotateCcw className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-              {sortingState === 'COMPLETED' ? 'Rerun sorting' : sortingState === 'PROCESSING' ? 'Sorting...' : 'Start CV sorting'}
-              {(isKickingOff || sortingState === 'PROCESSING') && <Loader2 className="h-4 w-4 animate-spin" />}
-            </button>
-            {canViewResults ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Link
-                href={`/results/${job.id}`}
-                className="inline-flex items-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
+                href={uploadHref}
+                className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#0F172A] transition hover:border-[#3D64FF]/50 hover:bg-[#F1F5FF]"
               >
-                View results
-                <Sparkles className="h-4 w-4" />
+                <UploadCloud className="h-4 w-4 text-[#3D64FF]" />
+                Upload CVs
               </Link>
-            ) : (
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F5F7FB] px-5 py-2 text-xs font-semibold uppercase tracking-wide text-[#8A94A6]"
-                disabled
+                onClick={startSorting}
+                className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                  disableStart
+                    ? 'cursor-not-allowed border border-[#E5E7EB] bg-[#F5F7FB] text-[#8A94A6]'
+                    : 'border border-[#3D64FF]/40 bg-[#3D64FF]/15 text-[#3D64FF] shadow-glow-primary hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25'
+                }`}
+                disabled={disableStart}
               >
-                Results after sorting
+                {sortingState === 'COMPLETED' ? <RotateCcw className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                {sortingState === 'COMPLETED' ? 'Rerun sorting' : sortingState === 'PROCESSING' ? 'Sorting...' : 'Start CV sorting'}
+                {(isKickingOff || sortingState === 'PROCESSING') && <Loader2 className="h-4 w-4 animate-spin" />}
               </button>
+              {canViewResults ? (
+                <Link
+                  href={`/results/${job.id}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#3D64FF]/40 bg-[#3D64FF]/15 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/70 hover:bg-[#3D64FF]/25"
+                >
+                  View results
+                  <Sparkles className="h-4 w-4" />
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F5F7FB] px-5 py-2 text-xs font-semibold uppercase tracking-wide text-[#8A94A6]"
+                  disabled
+                >
+                  Results after sorting
+                </button>
+              )}
+            </div>
+            {topCandidate && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#E5E7EB] bg-white/80 px-4 py-3 shadow-inner">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A94A6]">Top match</p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#0F172A]">
+                    <span>{topCandidate.name}</span>
+                    <span className="rounded-full bg-[#E6F4EA] px-2 py-1 text-xs font-semibold text-[#1B806A]">
+                      {topCandidate.matchScore}% match
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#6B7280]">
+                    {topCandidate.experience || 'Experience pending'} · {(topCandidate.matchedSkills || []).slice(0, 3).join(' · ')}
+                  </p>
+                </div>
+                <Link
+                  href={`/results/${job.id}/candidates/${topCandidate.id}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#3D64FF]/30 bg-[#3D64FF]/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#3D64FF] transition hover:border-[#3D64FF]/60 hover:bg-[#3D64FF]/20"
+                >
+                  Review match
+                  <Sparkles className="h-4 w-4" />
+                </Link>
+              </div>
             )}
           </div>
         </div>

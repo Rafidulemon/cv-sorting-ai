@@ -98,6 +98,27 @@ carriX is a Next.js 16 / React 19 platform that automates CV intake, parsing, an
 - **Billing & credits**: Plan limits plus per-resume credits gate ingestion; SSLCOMMERZ flows create payment sessions and callbacks apply credits + send receipts.
 - **Ops & recovery**: Queue concurrency, prefixes, and Redis/Qdrant URLs are environment-driven; workers defensively recreate Qdrant collections on dimension mismatches and sanitize invalid vectors during upsert.
 
+### Current free deployment footprint
+- **UI (Next.js)**: Vercel — `https://cv-sorting-ai.vercel.app`
+- **API (NestJS)**: Render free web service — `https://cv-sorting-ai.onrender.com/api`
+  - Ensure `NEXT_PUBLIC_BASE_URL` (and any `API_BASE_URL`) in Vercel envs points here.
+  - Render envs must include: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `S3_*`, `REDIS_URL` (Upstash TLS URL), `QDRANT_URL` / `QDRANT_API_KEY`, `OPENAI_API_KEY`, Google OAuth keys, SSLCommerz keys.
+- **Worker (queue + CV pipeline)**: Koyeb free worker — running `npm run worker:start` (BullMQ).
+  - Koyeb envs mirror the API (DB, S3/R2, Redis, Qdrant, OpenAI, NEXTAUTH, SSLCommerz, queue prefix/concurrency).
+  - Uses Upstash Redis (TLS) and Qdrant Cloud HTTPS endpoint.
+- **Redis**: Upstash free tier (TLS URL set as `REDIS_URL` across API + worker).
+- **DB**: Neon (us-east-1).
+- **Vector store**: Qdrant Cloud (HTTPS).
+- **Storage**: Cloudflare R2 (public base URL used for assets/downloads).
+
+### Deploying locally / sanity checks
+1) Install deps: `npm ci`
+2) Env: copy `.env` and set DB, Redis, Qdrant, R2, OpenAI, NEXTAUTH values.
+3) Run API: `npm run api:dev` (PORT 4000, prefix `/api`).
+4) Run worker: `npm run worker:dev`
+5) Seed (optional): `npm run prisma:seed`
+6) Frontend: `npm run dev` (uses `NEXT_PUBLIC_BASE_URL` for API calls).
+
 ### Backend (NestJS monorepo)
 ```
 carrix-backend/

@@ -32,10 +32,17 @@ const createJobSchema = z
     salaryMin: z.number().int().nonnegative().optional(),
     salaryMax: z.number().int().nonnegative().optional(),
     currency: z.string().trim().max(10).optional(),
+    minEducation: z.string().trim().min(1, "Minimum education is required"),
+    nationality: z.string().trim().min(1, "Nationality is required"),
+    ageMin: z.number().int().nonnegative().optional(),
+    ageMax: z.number().int().nonnegative().optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.previewHtml?.trim() && !value.previewText?.trim() && !value.description?.trim()) {
       ctx.addIssue({ code: "custom", message: "Preview content is required", path: ["previewText"] });
+    }
+    if (value.ageMin !== undefined && value.ageMax !== undefined && value.ageMin > value.ageMax) {
+      ctx.addIssue({ code: "custom", message: "Minimum age cannot exceed maximum age", path: ["ageMin"] });
     }
   });
 
@@ -57,6 +64,10 @@ const jobSelect: Prisma.JobSelect = {
    salaryMin: true,
    salaryMax: true,
    currency: true,
+   minEducation: true,
+   ageMin: true,
+   ageMax: true,
+   nationality: true,
   createdById: true,
   createdBy: { select: { id: true, name: true, email: true } },
   lastActivityAt: true,
@@ -258,6 +269,10 @@ export async function POST(request: NextRequest) {
       parsed.data.employmentType && Object.values(EmploymentType).includes(parsed.data.employmentType as EmploymentType)
         ? (parsed.data.employmentType as EmploymentType)
         : undefined;
+    const minEducation = parsed.data.minEducation?.trim() || "Any";
+    const nationality = parsed.data.nationality?.trim() || "Any";
+    const ageMin = parsed.data.ageMin ?? null;
+    const ageMax = parsed.data.ageMax ?? null;
 
     const data = {
       title: parsed.data.title.trim(),
@@ -277,6 +292,10 @@ export async function POST(request: NextRequest) {
       salaryMin: salaryMin ?? undefined,
       salaryMax: salaryMax ?? undefined,
       currency: parsed.data.currency ?? "BDT",
+      minEducation,
+      nationality,
+      ageMin: ageMin ?? undefined,
+      ageMax: ageMax ?? undefined,
     };
 
     const job = jobId

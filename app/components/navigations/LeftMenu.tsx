@@ -36,7 +36,7 @@ const baseNavItems: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Jobs", href: "/jobs", icon: Briefcase },
   { label: "Credits", href: "/credits", icon: CreditCard },
-  { label: "Candidates", href: "/cv/analyze", icon: Users2 },
+  { label: "Candidates", href: "/candidates", icon: Users2 },
   { label: "History", href: "/history", icon: BarChart3 },
   { label: "Profile", href: "/profile", icon: UserRound },
   { label: "Integrations", href: "/integrations", icon: Puzzle },

@@ -29,10 +29,17 @@ export class SortingWorker implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly embeddingService: EmbeddingService) {
     this.prefix = process.env.QUEUE_PREFIX || "carrix";
     this.concurrency = Number(process.env.QUEUE_CONCURRENCY_SORTING || 3);
-    const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
-    this.qdrantUrl = qdrantUrl || null;
+    const qdrantUrlRaw = process.env.QDRANT_URL || "http://localhost:6333";
+    this.qdrantUrl = qdrantUrlRaw || null;
     this.qdrantApiKey = process.env.QDRANT_API_KEY || null;
-    this.qdrant = qdrantUrl ? new QdrantClient({ url: qdrantUrl, apiKey: this.qdrantApiKey || undefined }) : null;
+    const isHttps = qdrantUrlRaw?.startsWith("https://");
+    const apiKeyForClient = isHttps ? this.qdrantApiKey || undefined : undefined;
+    if (this.qdrantApiKey && !isHttps) {
+      this.logger.warn(
+        "QDRANT_API_KEY is set but QDRANT_URL is not https; skipping api key to avoid insecure connection.",
+      );
+    }
+    this.qdrant = qdrantUrlRaw ? new QdrantClient({ url: qdrantUrlRaw, apiKey: apiKeyForClient }) : null;
   }
 
   async onModuleInit() {
@@ -99,8 +106,18 @@ export class SortingWorker implements OnModuleInit, OnModuleDestroy {
     try {
       const job = await prisma.job.findFirst({
         where: { id: jobId, organizationId },
-        include: {
+        select: {
+          id: true,
+          organizationId: true,
+          title: true,
+          description: true,
+          previewHtml: true,
           embedding: true,
+          requirements: true,
+          tags: true,
+          minEducation: true,
+          ageMin: true,
+          ageMax: true,
         },
       });
 
@@ -118,6 +135,13 @@ export class SortingWorker implements OnModuleInit, OnModuleDestroy {
           id: true,
           scoreBreakdown: true,
           overallScore: true,
+          extractedFields: true,
+          candidate: {
+            select: {
+              yearsExperience: true,
+              location: true,
+            },
+          },
         },
       });
 
@@ -218,12 +242,75 @@ export class SortingWorker implements OnModuleInit, OnModuleDestroy {
 
       const searchResults = await searchOrRetry(true);
 
+      const resumeMap = new Map(resumes.map((r) => [r.id, r]));
+
+      const requiredSkills: string[] =
+        (Array.isArray((job.requirements as Record<string, unknown> | null | undefined)?.skills)
+          ? ((job.requirements as { skills?: unknown[] }).skills as unknown[]).map((s) => String(s).trim()).filter(Boolean)
+          : job.tags) ?? [];
+
+      const minEducation = (job.minEducation || "").toLowerCase().trim() || null;
+      const ageMin = job.ageMin ?? null;
+      const ageMax = job.ageMax ?? null;
+
       const rankedResumeIds = searchResults
-        .map((item, index: number) => ({
-          resumeId: String((item.payload as { resumeId?: string } | undefined)?.resumeId ?? ""),
-          score: item.score ?? null,
-          rank: index + 1,
-        }))
+        .map((item, index: number) => {
+          const resumeId = String((item.payload as { resumeId?: string } | undefined)?.resumeId ?? "");
+          const simScore = item.score ?? 0;
+          const resume = resumeMap.get(resumeId);
+          const fields = (resume?.extractedFields as Record<string, unknown> | null | undefined) ?? {};
+          const resumeSkillsRaw = Array.isArray((fields as { skills?: unknown[] }).skills)
+            ? ((fields as { skills?: unknown[] }).skills as unknown[]).map((s) => String(s).toLowerCase().trim())
+            : [];
+          const educationRaw = Array.isArray((fields as { education?: unknown[] }).education)
+            ? ((fields as { education?: unknown[] }).education as unknown[]).map((s) => String(s).toLowerCase())
+            : [];
+          const matchedSkills = requiredSkills.filter((req) =>
+            resumeSkillsRaw.includes(req.toLowerCase()),
+          );
+          const skillMatch = requiredSkills.length
+            ? matchedSkills.length / requiredSkills.length
+            : 1;
+          const educationMatch = minEducation
+            ? educationRaw.some((e) => e.includes(minEducation))
+              ? 1
+              : 0
+            : 1;
+          const estYears =
+            typeof (fields as { totalYears?: unknown }).totalYears === "number"
+              ? ((fields as { totalYears?: number }).totalYears as number)
+              : resume?.candidate?.yearsExperience ?? null;
+          const estAge = typeof estYears === "number" ? estYears + 22 : null;
+          const ageFit =
+            ageMin === null && ageMax === null
+              ? 1
+              : estAge === null
+                ? 1 // unknown age → don’t penalize
+                : (ageMin === null || estAge >= ageMin) && (ageMax === null || estAge <= ageMax)
+                  ? 1
+                  : 0;
+
+          const composite =
+            0.6 * simScore +
+            0.3 * skillMatch +
+            0.1 * educationMatch;
+          const finalScore = ageFit === 1 ? composite : composite * 0.85;
+
+          return {
+            resumeId,
+            simScore,
+            score: finalScore,
+            rank: index + 1,
+            breakdown: {
+              simScore,
+              skillMatch,
+              educationMatch,
+              ageFit,
+              matchedSkills,
+              missingSkills: requiredSkills.filter((r) => !matchedSkills.includes(r)),
+            },
+          };
+        })
         .filter((item) => item.resumeId);
 
       const now = new Date();
@@ -243,8 +330,14 @@ export class SortingWorker implements OnModuleInit, OnModuleDestroy {
             data: {
               overallScore: item.score ?? undefined,
               scoreBreakdown: {
-                qdrantScore: item.score ?? null,
+                qdrantScore: item.simScore ?? null,
                 rank: item.rank,
+                simScore: item.simScore ?? null,
+                skillMatch: item.breakdown?.skillMatch ?? null,
+                educationMatch: item.breakdown?.educationMatch ?? null,
+                ageFit: item.breakdown?.ageFit ?? null,
+                matchedSkills: item.breakdown?.matchedSkills ?? [],
+                missingSkills: item.breakdown?.missingSkills ?? [],
               },
               lastScoredAt: now,
             },

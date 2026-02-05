@@ -66,6 +66,14 @@ export default function UploadCandidatesPage() {
     notProcessedCount,
     processedResumeCount,
     openResumeProcessingModal,
+    minEducation,
+    setMinEducation,
+    ageMin,
+    setAgeMin,
+    ageMax,
+    setAgeMax,
+    nationality,
+    setNationality,
   } = useJobCreation();
 
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? "");
@@ -481,6 +489,56 @@ export default function UploadCandidatesPage() {
                 <p className="mt-3 text-xs text-[#8A94A6]">
                   We&apos;ll sync new CVs from this location before each rerun.
                 </p>
+              </div>
+
+              <div className="grid gap-4 rounded-3xl border border-[#DCE0E0] bg-[#FFFFFF] p-5 text-sm text-[#4B5563]">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#8A94A6]">
+                  Candidate requirements
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Minimum education</span>
+                    <input
+                      value={minEducation}
+                      onChange={(e) => setMinEducation(e.target.value)}
+                      placeholder="e.g., Bachelor’s degree"
+                      className="w-full rounded-xl border border-[#DCE0E0] px-3 py-2 text-sm text-[#181B31] focus:border-[#3D64FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Nationality</span>
+                    <input
+                      value={nationality}
+                      onChange={(e) => setNationality(e.target.value)}
+                      placeholder="e.g., Any / Bangladeshi / US Citizen"
+                      className="w-full rounded-xl border border-[#DCE0E0] px-3 py-2 text-sm text-[#181B31] focus:border-[#3D64FF] focus:outline-none"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Minimum age</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={ageMin}
+                      onChange={(e) => setAgeMin(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="e.g., 18"
+                      className="w-full rounded-xl border border-[#DCE0E0] px-3 py-2 text-sm text-[#181B31] focus:border-[#3D64FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8A94A6]">Maximum age</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={ageMax}
+                      onChange={(e) => setAgeMax(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="e.g., 55"
+                      className="w-full rounded-xl border border-[#DCE0E0] px-3 py-2 text-sm text-[#181B31] focus:border-[#3D64FF] focus:outline-none"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           </div>

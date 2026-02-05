@@ -108,11 +108,11 @@ export function JobCreationStatus() {
               <div className="space-y-6 p-8 text-[#181B31]">
                 <div className="flex items-center gap-3">
                   <Loader2 className="h-5 w-5 animate-spin text-[#3D64FF]" />
-                  <h3 className="text-lg font-semibold text-[#181B31]">Creating job</h3>
+                  <h3 className="text-lg font-semibold text-[#181B31]">Sorting candidates</h3>
                 </div>
                 <p className="text-sm text-[#4B5563]">
-                  Saving your job, storing the preview as HTML, and queuing the first sorting run. This should only take
-                  a moment.
+                  We&apos;re normalizing resumes, extracting contact details, and ranking them for this job. Hang tight
+                  — this usually takes just a few seconds.
                 </p>
                 <div className="space-y-4">
                   <div className="h-2 w-full overflow-hidden rounded-full bg-[#DCE0E0]">
