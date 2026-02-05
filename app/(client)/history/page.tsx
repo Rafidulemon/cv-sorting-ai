@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -44,7 +44,7 @@ const statusTone: Record<SortingState, string> = {
   COMPLETED: "bg-[#e7f8ef] text-[#15803d] border-[#d1f3e0]",
 };
 
-const statusIcon: Record<SortingState, JSX.Element> = {
+const statusIcon: Record<SortingState, ReactElement> = {
   NOT_STARTED: <PauseCircle className="h-4 w-4" />,
   PROCESSING: <Loader2 className="h-4 w-4 animate-spin" />,
   COMPLETED: <CheckCircle2 className="h-4 w-4" />,
